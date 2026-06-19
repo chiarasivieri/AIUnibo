@@ -11,6 +11,7 @@ All materials are organized by course and consist mainly of Jupyter Notebooks, P
 | Folder | Course | Description |
 |--------|--------|-------------|
 | `AI for Medicine` | AI for Medicine | Notes and materials on clinical AI applications, medical imaging, and health data analysis |
+| `AI in Industry` | AI in Industry | *Work in progress* — project on anomaly detection in industrial/operational settings, exploring density estimation methods (KDE, GMM, Autoencoders, Normalizing Flows) |
 | `CDMO` | Combinatorial Decision Making and Optimization | Constraint programming, optimization models, and problem-solving techniques |
 | `Cybersecurity` | Cybersecurity | Project report and materials on security topics in AI systems |
 | `Ethics in AI` | Ethics in AI | Notes on fairness, accountability, transparency, and the societal impact of AI |
@@ -18,6 +19,7 @@ All materials are organized by course and consist mainly of Jupyter Notebooks, P
 | `IPCV` | Image Processing and Computer Vision | Computer vision techniques, image processing algorithms, and deep learning for vision |
 | `ML` | Machine Learning | Classical and advanced ML methods, theory, and applied exercises |
 | `NLP` | Natural Language Processing | Text processing, language models, sequence-to-sequence architectures, and NLP pipelines |
+| `project-work-DL` | Deep Learning | Project work on music genre classification from lyrics — TF-IDF+MLP baseline vs. fine-tuned DistilBERT |
 
 ---
 
