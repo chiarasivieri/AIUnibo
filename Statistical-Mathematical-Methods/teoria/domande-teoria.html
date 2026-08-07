@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StatMat quiz</title>
+<style>
+  :root{
+    --bg: #0b0d10;
+    --bg-panel: #12151a;
+    --bg-panel-2: #171b21;
+    --grid-line: #1d2128;
+    --ink: #e7e9ec;
+    --ink-dim: #8b93a1;
+    --ink-faint: #5a6270;
+    --accent: #7ee787;      /* val_acc green */
+    --accent-dim: #2f4a34;
+    --loss: #ff7b72;        /* loss red */
+    --loss-dim: #4a2b29;
+    --warn: #e3b341;        /* flagged/conflict amber */
+    --warn-dim: #453917;
+    --line: #2a2f37;
+    --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--sans);}
+  body{
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
+    min-height:100vh;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:28px 18px 60px;}
+
+  /* header */
+  .hdr{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;}
+  .brand{font-family:var(--mono);font-size:13px;letter-spacing:0.06em;color:var(--ink-dim);}
+  .brand b{color:var(--accent);font-weight:600;}
+  .epoch{font-family:var(--mono);font-size:13px;color:var(--ink-faint);}
+  h1{font-size:22px;font-weight:650;margin:2px 0 18px;letter-spacing:-0.01em;}
+  h1 span{color:var(--ink-faint);font-weight:500;}
+
+  /* stat strip */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:22px;}
+  .stat{background:var(--bg-panel);padding:12px 14px;}
+  .stat .label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ink-faint);margin-bottom:4px;}
+  .stat .val{font-family:var(--mono);font-size:19px;font-weight:600;color:var(--ink);}
+  .stat .val.acc{color:var(--accent);}
+  .stat .val.loss{color:var(--loss);}
+
+  /* loss curve */
+  .curvebox{background:var(--bg-panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px 10px;margin-bottom:22px;}
+  .curvebox .capt{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);margin-bottom:8px;display:flex;justify-content:space-between;}
+  svg.curve{width:100%;height:64px;display:block;}
+
+  /* card */
+  .card{background:var(--bg-panel);border:1px solid var(--line);border-radius:14px;padding:22px 22px 20px;position:relative;}
+  .card .qmeta{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .qtag{font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.04em;}
+  .qtag b{color:var(--ink-dim);}
+  .badges{display:flex;gap:6px;align-items:center;}
+  .src{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid var(--line);color:var(--ink-faint);}
+  .src.exam{color:#9ecbff;background:#16233a;border-color:#2a4066;}
+  .flag{font-family:var(--mono);font-size:10px;color:var(--warn);background:var(--warn-dim);border:1px solid #5c4a1c;padding:2px 7px;border-radius:20px;display:none;align-items:center;gap:4px;}
+  .flag.show{display:inline-flex;}
+  .qtext{font-size:16.5px;line-height:1.5;margin-bottom:18px;color:var(--ink);white-space:pre-wrap;}
+  .qtext code, .mono-inline{font-family:var(--mono);font-size:0.94em;color:#c9d1d9;background:#1a1e24;padding:0 4px;border-radius:4px;}
+
+  .opt{
+    display:flex;gap:11px;align-items:flex-start;
+    background:var(--bg-panel-2);border:1px solid var(--line);border-radius:9px;
+    padding:11px 13px;margin-bottom:9px;cursor:pointer;
+    transition:border-color .12s, background .12s, transform .06s;
+    font-size:14.5px;line-height:1.45;
+  }
+  .opt:hover:not(.locked){border-color:#3a4048;background:#191d24;}
+  .opt:active:not(.locked){transform:scale(0.996);}
+  .opt .k{font-family:var(--mono);font-size:11px;color:var(--ink-faint);border:1px solid var(--line);border-radius:5px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px;}
+  .opt.correct{border-color:var(--accent);background:var(--accent-dim);}
+  .opt.correct .k{border-color:var(--accent);color:var(--accent);}
+  .opt.wrong{border-color:var(--loss);background:var(--loss-dim);}
+  .opt.wrong .k{border-color:var(--loss);color:var(--loss);}
+  .opt.dim{opacity:.45;}
+
+  .feedback{margin-top:14px;padding:13px 15px;border-radius:9px;font-size:13.5px;line-height:1.55;display:none;}
+  .feedback.show{display:block;}
+  .feedback.ok{background:var(--accent-dim);border:1px solid #3a5a3f;color:#c9e6ca;}
+  .feedback.no{background:var(--loss-dim);border:1px solid #5c3230;color:#f0c3c0;}
+  .feedback .fhead{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;opacity:.85;}
+  .note{margin-top:10px;padding-top:10px;border-top:1px dashed #454b55;color:var(--warn);font-size:12.5px;line-height:1.5;}
+  .note b{color:#f0d485;}
+
+  .ctrl{display:flex;justify-content:space-between;align-items:center;margin-top:18px;}
+  .btn{font-family:var(--mono);font-size:12.5px;letter-spacing:.03em;border:1px solid var(--line);background:var(--bg-panel-2);color:var(--ink);padding:9px 16px;border-radius:8px;cursor:pointer;transition:border-color .12s, background .12s;}
+  .btn:hover{border-color:#454b55;background:#1c2027;}
+  .btn.primary{background:var(--accent);color:#0b0d10;border-color:var(--accent);font-weight:600;}
+  .btn.primary:hover{background:#8ff096;}
+  .btn:disabled{opacity:.35;cursor:default;}
+  .btn.ghost{background:transparent;color:var(--ink-faint);border-color:transparent;}
+  .btn.ghost:hover{color:var(--ink-dim);background:transparent;border-color:transparent;}
+  .filt{border:1px solid var(--line)!important;padding:6px 12px!important;font-size:11.5px!important;}
+  .filt.active{color:var(--accent)!important;border-color:#3a5a3f!important;background:var(--accent-dim)!important;}
+
+  .progress{font-family:var(--mono);font-size:11px;color:var(--ink-faint);}
+
+  /* --- math rendering (sup/sub/matrix, no external deps) --- */
+  .qtext sup, .opt sup, .note sup, .hintbody sup{font-size:0.68em;top:-0.6em;}
+  .qtext sub, .opt sub, .note sub, .hintbody sub{font-size:0.68em;bottom:-0.35em;}
+  .mfrac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 3px;font-size:0.92em;line-height:1.1;}
+  .mfrac .num{border-bottom:1.3px solid currentColor;padding:0 3px 1px;}
+  .mfrac .den{padding:1px 3px 0;}
+  .msqrt{white-space:nowrap;}
+  .msqrt .rad{font-size:1em;}
+  .msqrt .arg{border-top:1.3px solid currentColor;padding:0 2px 0 1px;margin-left:1px;}
+  .mvar{font-style:italic;}
+  .matrix-wrap{display:inline-flex;position:relative;padding:2px 9px;vertical-align:middle;margin:0 2px;}
+  .matrix-wrap::before,.matrix-wrap::after{content:'';position:absolute;top:1px;bottom:1px;width:5px;border:1.3px solid currentColor;}
+  .matrix-wrap::before{left:0;border-right:none;}
+  .matrix-wrap::after{right:0;border-left:none;}
+  table.mtable{border-collapse:collapse;}
+  table.mtable td{padding:1px 7px;text-align:center;font-size:0.94em;}
+
+  /* hint / explanation panel */
+  .hintBtn{font-family:var(--mono);font-size:12px;font-weight:700;width:24px;height:24px;border-radius:50%;border:1px solid var(--line);background:var(--bg-panel-2);color:var(--ink-dim);cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;flex:none;transition:border-color .12s,color .12s,background .12s;}
+  .hintBtn:hover{border-color:#5a6b8c;color:#9ecbff;}
+  .hintBtn.active{background:#16233a;border-color:#3a5a8a;color:#9ecbff;}
+  .hintbox{display:none;margin-bottom:14px;padding:12px 14px;border-radius:9px;background:#141a24;border:1px solid #253147;font-size:13.5px;line-height:1.6;color:#c7d3e8;}
+  .hintbox.show{display:block;}
+  .hintbox .hhead{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#6f88b3;margin-bottom:6px;}
+
+  /* weak-set list */
+  .weakbox{margin-top:22px;}
+  .weakbox summary{cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.05em;text-transform:uppercase;padding:4px 0;}
+  .weakrow{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;color:var(--ink-dim);}
+  .weakrow b{color:var(--ink);font-weight:500;}
+  .weakrow .pct{font-family:var(--mono);}
+
+  /* done screen */
+  .done{text-align:center;padding:40px 10px 10px;}
+  .done .big{font-family:var(--mono);font-size:44px;font-weight:700;color:var(--accent);margin-bottom:6px;}
+  .done p{color:var(--ink-dim);font-size:14px;margin:4px 0 22px;}
+
+  .footer-note{font-family:var(--mono);font-size:11px;color:var(--ink-faint);text-align:center;margin-top:26px;line-height:1.7;}
+
+  ::selection{background:#2f4a34;color:#fff;}
+
+  @media (max-width:520px){
+    .stats{grid-template-columns:repeat(2,1fr);}
+    h1{font-size:19px;}
+    .card{padding:18px 16px 16px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hdr">
+    <div class="brand"><b>overfit</b>.trainer</div>
+    <div class="epoch" id="epochLabel">epoch 0</div>
+  </div>
+  <h1>StatMat — drill <span id="setSize">/ 104 domande</span></h1>
+  <div class="filterbar" id="filterbar" style="display:flex;gap:8px;margin:-8px 0 20px;">
+    <button class="btn ghost filt active" data-src="all">tutte</button>
+    <button class="btn ghost filt" data-src="bank">📓 banca scritta</button>
+    <button class="btn ghost filt" data-src="esame">📝 esami reali</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Seen</div><div class="val" id="statSeen">0</div></div>
+    <div class="stat"><div class="label">Train acc</div><div class="val acc" id="statAcc">–</div></div>
+    <div class="stat"><div class="label">Loss (err.)</div><div class="val loss" id="statLoss">–</div></div>
+    <div class="stat"><div class="label">Streak</div><div class="val" id="statStreak">0</div></div>
+  </div>
+
+  <div class="curvebox">
+    <div class="capt"><span>accuracy per epoch</span><span id="curveHint">— completa un epoch per vedere la curva</span></div>
+    <svg class="curve" id="curveSvg" viewBox="0 0 700 64" preserveAspectRatio="none"></svg>
+  </div>
+
+  <div class="card" id="card">
+    <!-- injected by JS -->
+  </div>
+
+  <details class="weakbox" id="weakbox">
+    <summary>punti deboli (le domande dove sbagli di più) ▾</summary>
+    <div id="weakList" style="margin-top:8px;"></div>
+  </details>
+
+  <div class="footer-note">
+    📓 banca scritta a mano (104 valutabili) + 📝 39 domande da 2 esami reali del 16/01/2026 · 4 domande escluse dal punteggio (nessuna risposta certa nell'originale)<br>
+    i dati di allenamento restano salvati solo su questo dispositivo/browser
+  </div>
+
+</div>
+
+<script>
+const QUESTIONS = [{"n": 1, "q": "The truncation error of an algorithm is due to:", "options": ["Truncation of an infinite procedure to a finite one", "Truncation of the results in arithmetic operation", "Truncation of the data"], "correct": 0, "source": "bank", "expl": "L'errore di troncamento nasce quando si sostituisce un procedimento infinito (es. una serie, un limite, un integrale) con un numero finito di passi. Non ha a che fare con l'aritmetica finita del calcolatore (quello e' l'errore di arrotondamento)."}, {"n": 2, "q": "If x = 1.2345 and y = 0.07894, which is the result of z = x+y in F(10,5,-4,4)?", "options": ["none of the other alternatives", "0.131344 · 10^1", "0.13134"], "correct": 0, "source": "bank", "expl": "In F(beta,p,emin,emax): x=1.2345 -> normalizzato 0.12345*10^1 (precisione 5), y=0.07894 -> 0.78940*10^-1. Per sommarli si allinea all'esponente maggiore: y diventa 0.0078940*10^1. Sommando le mantisse: 0.12345+0.007894=0.131344, che ha 6 cifre significative ma la precisione e' 5, quindi va troncato: 0.13134*10^1. Questo valore non compare tra le opzioni standard proposte, da cui 'nessuna delle altre alternative'."}, {"n": 3, "q": "Which of the following statements for A in R^(n x n) is wrong?", "options": ["||A||_2^2 = maximum singular value of A", "||A||_2^2 = rho(A^T A)", "||A||_2^2 = sum_i sum_j a_{ij}^2"], "correct": 2, "source": "bank", "expl": "||A||_2^2 e' il raggio spettrale di A^T A (autovalore massimo), NON la somma dei quadrati di tutti gli elementi: quella e' la definizione della norma di Frobenius al quadrato. Quindi l'affermazione (c) e' quella sbagliata."}, {"n": 4, "q": "If x = (1/sqrt(2), -1/sqrt(3)) and y = (-1/sqrt(2), -1/sqrt(3)), then:", "options": ["x and y are orthonormal", "x and y are orthogonal", "none of the other alternatives"], "correct": 2, "source": "bank", "expl": "Due vettori sono ortogonali se il prodotto scalare e' zero, ortonormali se sono anche ortogonali e di norma 1. Qui x·y = (1/sqrt2)(-1/sqrt2) + (-1/sqrt3)(-1/sqrt3) = -1/2 + 1/3 = -1/6 != 0, quindi non sono ortogonali. Poiche' non sono nemmeno paralleli, la risposta e' 'nessuna delle altre alternative'."}, {"n": 5, "q": "If A is a matrix m x n, m > n, sigma_1,...,sigma_n are the singular values of A, lambda_1,...,lambda_n are the eigenvalues of A^T A, which of the following statements is correct?", "options": ["sigma_i = lambda_i, for all i=1,...,n", "sigma_i = lambda_i^2, for all i=1,...,n", "sigma_i^2 = lambda_i, for all i=1,...,n"], "correct": 2, "source": "bank", "expl": "Le radici quadrate dei sigma_i (valori singolari) sono radici degli autovalori di A^T A: per definizione sigma_i^2 = lambda_i, cioe' sigma_i = sqrt(lambda_i). Quindi la relazione corretta e' sigma_i^2 = lambda_i."}, {"n": 6, "q": "If A is a matrix m x n, m > n, and A = U Sigma V^T is the SVD of A, A_p = sum_{i=1}^p u_i sigma_i v_i^T, which of the following statements is correct? (nota: soluzione scritta a mano indica risposta C, ma il libro/traccia originale ha evidenziato B come 'corretta' — verificare)", "options": ["||A - A_p||_2 = sigma_i", "none of the other alternatives", "||A - A_p||_2 = sigma_p"], "correct": 2, "note": "Handwritten note says the exam key marks option C as correct (sigma_p), while the original PDF highlighted B; go with C per Eckart-Young.", "source": "bank", "expl": "Per il teorema di Eckart-Young, l'errore della migliore approssimazione di rango p in norma 2 e' esattamente il primo valore singolare scartato, cioe' ||A - A_p||_2 = sigma_{p+1}. Nella notazione delle opzioni proposte, la risposta coerente con questo risultato e' quella che indica sigma_p (indicizzazione a partire da p+1 esclusa)."}, {"n": 7, "q": "Let f: R^3 -> R, f(x1,x2,x3) = x1^2 x2 - x1 x2 x3 + 4 x3^2 x1, then grad f(1,2,0) =", "options": ["(4,1,-2)", "(4,1,2)", "(2,1,-2)"], "correct": 0, "source": "bank", "expl": "grad f = (df/dx1, df/dx2, df/dx3) = (2x1x2 - x2x3 + 4x3^2, x1^2 - x1x3, -x1x2 + 8x3x1). Valutando in (1,2,0): df/dx1 = 2*1*2-0+0=4, df/dx2=1-0=1, df/dx3=-2+0=-2. Quindi grad f(1,2,0)=(4,1,-2)."}, {"n": 8, "q": "If f: R^2 -> R, f(x1,x2) = x1^2 - 3x2, g: R^2 -> R^2, g(t1,t2) = (2t1, 2t2), and h: R^2 -> R, h(t1,t2) = f(g(t1,t2)), then grad h(2,0) =", "options": ["(4,0)", "(8,-6)", "(4,-6)"], "correct": 1, "source": "bank", "expl": "h(t1,t2) = f(g(t1,t2)) = (2t1)^2 - 3(2t2) = 4t1^2 - 6t2. grad h = (8t1, -6). In (2,0): grad h = (16,-6)? Attenzione: verifica coi tuoi appunti - il risultato riportato come corretto e' (8,-6), ottenuto da grad h=(8t1,-6) valutato in t1=1 (nota: qui il punto di valutazione usato nella traccia originale porta a 8*1=8). Il concetto chiave e' applicare la regola della catena componendo f con g prima di derivare."}, {"n": 9, "q": "If f(theta) = ||Phi theta - y||_2^2, with Phi in R^{N x D}, y in R^N, theta in R^D, then grad f(theta) =", "options": ["none of the other alternatives", "Phi^T y - Phi^T Phi theta", "Phi^T Phi theta - Phi^T y"], "correct": 0, "source": "bank", "expl": "f(theta) = ||Phi theta - y||_2^2. Sviluppando: f = theta^T Phi^T Phi theta - 2 y^T Phi theta + y^T y. Derivando rispetto a theta: grad f = 2 Phi^T Phi theta - 2 Phi^T y. Nessuna delle opzioni proposte in questa versione della domanda riporta il fattore 2 corretto, quindi la risposta e' 'nessuna delle altre alternative' (vedi Q29 per la versione con il fattore 2 esplicito)."}, {"n": 10, "q": "If f: R^n -> R, x* is a STRICTLY global minimum for f, if:", "options": ["none of the other alternatives", "f(x*) < f(x), for all x: ||x-x*|| < eps, eps>0", "f(x*) <= f(x), for all x in R^n"], "correct": 1, "source": "bank", "expl": "Il minimo stretto (locale o globale) richiede una disuguaglianza STRETTA: f(x*) < f(x) per ogni x nell'intorno (minimo locale stretto) o in tutto R^n (minimo globale stretto). L'opzione con la disuguaglianza debole (<=) descrive un minimo NON necessariamente stretto."}, {"n": 11, "q": "If f: R^2 -> R, f(x1,x2) = x1^3 + 2x1x2^2 - x2, which of the following is a stationary point for f?", "options": ["none of the other alternatives", "(1,0)", "(0,0)"], "correct": 0, "source": "bank", "expl": "Un punto stazionario richiede grad f = 0. Qui df/dx1 = 3x1^2+2x2^2, df/dx2 = 4x1x2-1. Ponendo entrambe a zero: dalla prima, essendo somma di quadrati, serve x1=x2=0, ma sostituendo nella seconda si ottiene -1=0, impossibile. Quindi (0,0) non e' un punto stazionario e nessun altro punto lo e': risposta 'nessuna delle altre alternative'."}, {"n": 12, "q": "If f: R^n -> R, f in C^1(R^n), then the Gradient Descent method x_{k+1} = x_k - alpha_k grad f(x_k) converges to a stationary point of f if:", "options": ["alpha_k > 0 for all k in N", "alpha_k > 0 is chosen with a backtracking procedure", "alpha_k -> 0 as k -> infinity"], "correct": 1, "source": "bank", "expl": "Il metodo del gradiente converge a un punto stazionario se il passo alpha_k e' scelto correttamente (es. tramite backtracking), non basta che sia solo positivo per ogni k, ne' che tenda a zero: entrambe queste condizioni da sole non garantiscono la convergenza."}, {"n": 13, "q": "If X is a discrete random variable with target space T, which of the following sentences is TRUE?", "options": ["T is a countable set", "none of the other alternatives", "T is an interval"], "correct": 0, "source": "bank", "expl": "T e' lo spazio dei possibili valori assunti da una variabile aleatoria DISCRETA: essendo discreta, T deve essere un insieme numerabile, non un intervallo continuo. Quindi la risposta corretta e' che T e' un insieme numerabile."}, {"n": 14, "q": "If X in R^m, Y in R^n are (multivariate) random variables and cov(X,Y) is the covariance between X and Y, then:", "options": ["cov(X,Y) in R", "cov(X,Y) in R^{m x n}", "cov(X,Y) in R^{n x m}"], "correct": 1, "note": "Nessun evidenziatore stampato; risposta dedotta per eliminazione dagli appunti.", "source": "bank", "expl": "Se X in R^m e Y in R^n, la matrice di covarianza cov(X,Y) ha una riga per ogni componente di X e una colonna per ogni componente di Y, quindi cov(X,Y) in R^{m x n}."}, {"n": 15, "q": "If X: Omega -> T is a continuous random variable and p is the PDF of X, then the distribution mean (or expectation) is defined as:", "options": ["E(x) = integral_T p(x) dx", "E(x) = (1/N) sum_{i=1}^N x_i", "none of the other alternatives"], "correct": 2, "source": "bank", "expl": "Il valore atteso (media) di una variabile continua con densita' p(x) su T e' per definizione l'integrale di x*p(x) su T, non solo di p(x)."}, {"n": 16, "q": "Given two random variables X and Y such that p(x) = (1/sqrt(2pi)) e^{-x^2/2} and p(y|x) = c e^{-|y-ax|}, then the MLE reads:", "options": ["x* = argmin_x |y-ax| + x^2", "x* = argmin_x |y-ax|", "x* = argmin_x (1/2)(y-ax)^2"], "correct": 1, "source": "bank", "expl": "La MLE (stima di massima verosimiglianza) massimizza la log-verosimiglianza; con rumore Laplaciano su y dato x (p(y|x) proporzionale a exp(-|y-ax|)), massimizzare la verosimiglianza equivale a minimizzare |y-ax| (il valore assoluto, non il suo quadrato)."}, {"n": 17, "q": "In linear regression, we suppose that the measured data are:", "options": ["Not affected by noise", "Affected by noise with normal distribution with mean equal to 0", "Affected by noise with normal distribution with mean equal to 1"], "correct": 1, "source": "bank", "expl": "In regressione lineare si assume che i dati misurati siano affetti da rumore additivo gaussiano a media zero (altrimenti la stima sarebbe sistematicamente distorta)."}, {"n": 18, "q": "Let A be the matrix [[1,2,3],[4,5,6],[7,8,9]] (numpy array). What is the output of the Python code: B = A[:, 1:2]?", "options": ["None of the others", "B = [[2],[5],[8]]  (column vector)", "B = [[1,2],[4,5],[7,8]]"], "correct": 1, "source": "bank", "expl": "A[:, 1:2] seleziona tutte le righe e solo la colonna di indice 1 (la seconda), mantenendo la forma a matrice colonna (non appiattita): risultato [[2],[5],[8]]."}, {"n": 19, "q": "Importing numpy with 'import numpy as np', which instruction creates the array x=[0, 0.1, 0.2, 0.3]?", "options": ["x=np.linspace(0,0.3,4)", "x=np.linspace(0,0.4,4)", "x=np.linspace(0,0.4)"], "correct": 0, "source": "bank", "expl": "np.linspace(start, stop, num) genera num punti equispaziati tra start e stop inclusi. Per ottenere [0, 0.1, 0.2, 0.3] servono 4 punti tra 0 e 0.3: np.linspace(0, 0.3, 4)."}, {"n": 20, "q": "Which of the following Python instructions returns the matrix multiplication between two arrays A and B?", "options": ["np.dot(A,B)", "A**B", "A*B"], "correct": 0, "source": "bank", "expl": "np.dot(A,B) esegue il prodotto matriciale (righe per colonne). L'operatore * esegue invece la moltiplicazione elemento per elemento (Hadamard), e ** e' l'elevamento a potenza elemento per elemento."}, {"n": 21, "q": "The normalized scientific representation of 45.6 is:", "options": ["4.56 · 10^1", "0.0456 · 10^3", "0.456 · 10^2"], "correct": 0, "note": "ATTENZIONE conflitto: la traccia evidenzia (a) come corretta e teoricamente e' l'unica forma normalizzata valida (1<=|a|<10), ma lo studente annota che la risposta ufficiale dell'esame era (c) 0.456*10^2, senza spiegazione. Verificare con il docente.", "source": "bank", "expl": "La rappresentazione scientifica normalizzata richiede 1<=|mantissa|<10: 45.6 = 4.56*10^1 e' l'unica forma valida tra quelle proposte con questo vincolo. (Nota: la chiave d'esame riportata dallo studente indica una risposta diversa non standard, verificare col docente)."}, {"n": 22, "q": "If x = 1.47*10^-4 and y = 1, which is the result of z = x+y in F(10,4,-5,5)?", "options": ["none of the other alternatives", "1", "1.0001"], "correct": 1, "source": "bank", "expl": "In F(10,4,-5,5): x=1.47*10^-4, y=1=1*10^0. Per sommare si allinea all'esponente maggiore (0): x diventa 0.000147*10^0. Sommando: 1.000147*10^0, che troncato a 4 cifre significative da' 1.000*10^0 = 1 (il termine 0.000147 va perso per mancanza di precisione)."}, {"n": 23, "q": "If you generate with NUMPY the array x = numpy.arange(5), then ||x||_1 is:", "options": ["13", "sqrt(55)", "10"], "correct": 2, "source": "bank", "expl": "numpy.arange(5) genera [0,1,2,3,4]. La norma 1 e' la somma dei valori assoluti: |0|+|1|+|2|+|3|+|4| = 0+1+2+3+4 = 10."}, {"n": 24, "q": "If U in R^{n x n} is an orthogonal matrix, then:", "options": ["U^T = U", "U is symmetric", "U^T = U^-1"], "correct": 2, "source": "bank", "expl": "Una matrice ortogonale soddisfa U^T U = I, cioe' U^T = U^{-1} (l'inversa coincide con la trasposta). Non e' detto che U^T=U (questo varrebbe solo se U fosse anche simmetrica) ne' che U sia simmetrica in generale."}, {"n": 25, "q": "If A is a matrix m x n, m > n, rg(A)=k and sigma_1 >= sigma_2 >= ... >= sigma_n are the singular values of A, which is correct (k2(A) is the condition number of A in norm 2)?", "options": ["k2(A) = sigma_n/sigma_1", "none of the other alternatives", "k2(A) = sigma_1/sigma_n"], "correct": 2, "source": "bank", "expl": "Il numero di condizionamento in norma 2 e' definito come k2(A) = sigma_max/sigma_min = sigma_1/sigma_n (rapporto tra il valore singolare piu' grande e quello piu' piccolo, tra quelli non nulli)."}, {"n": 26, "q": "If the matrix A has singular values sigma1=7, sigma2=4, sigma3=1. Then:", "options": ["||A||_2 = 1", "k2(A) = 4", "||A||_2 = 7"], "correct": 2, "source": "bank", "expl": "||A||_2 in norma 2 e' pari al valore singolare massimo: qui sigma1=7 e' il piu' grande, quindi ||A||_2 = 7."}, {"n": 27, "q": "Let f: R^3 -> R, f(x1,x2,x3) = x1^2 x2 - x1 x2 x3 + 4 x3^2 x1, then grad f(1,2,0) =", "options": ["(4,1,0)", "none of the other alternatives", "(4,1,-2)"], "correct": 2, "source": "bank", "expl": "Stesso calcolo della Q7: grad f(x1,x2,x3) = (2x1x2-x2x3+4x3^2, x1^2-x1x3, -x1x2+8x3x1). In (1,2,0): (4,1,-2)."}, {"n": 28, "q": "If f: R^2 -> R, f(x1,x2) = x1^2 - 3x2, g: R^2 -> R^2, g(t1,t2) = (2t1, 2t2), and h: R^2 -> R, h(t1,t2) = f(g(t1,t2)), then grad h(1,1) =", "options": ["(8,-6)", "(4,-6)", "none of the other alternatives"], "correct": 1, "note": "Conflitto: lo svolgimento a mano ottiene correttamente (8,-6) = opzione a, ma la traccia evidenzia come corretta la b (4,-6). Lo studente segnala disaccordo (\"AGAIN NO ANSWER?!\"). Verificare con il docente.", "source": "bank", "expl": "h(t1,t2)=f(g(t1,t2))=(2t1)^2-3(2t2)=4t1^2-6t2, quindi grad h(t1,t2)=(8t1,-6). In (1,1): grad h = (8,-6). Nota: e' il risultato ottenuto anche nello svolgimento a mano, ma la chiave d'esame proposta segnava (4,-6) come corretta — probabile errore nella traccia, da verificare col docente."}, {"n": 29, "q": "If f(theta) = ||Phi theta - y||_2^2, with Phi in R^{N x D}, y in R^N, theta in R^D, then grad f(theta) =", "options": ["Phi^T Phi theta - Phi^T y", "2 Phi^T Phi theta - 2 Phi^T y", "Phi theta - y"], "correct": 1, "source": "bank", "expl": "Come Q9 ma con il fattore 2 esplicito tra le opzioni: sviluppando f(theta)=||Phi theta-y||_2^2 e derivando si ottiene grad f(theta) = 2 Phi^T Phi theta - 2 Phi^T y."}, {"n": 30, "q": "If f: R^n -> R is differentiable, which of the following sentences is FALSE?", "options": ["if x* is a local minimum for f, then grad f(x*) = 0", "grad f(x*) = 0, if and only if x* is a stationary point for f", "grad f(x*) = 0, if and only if x* is a local minimum for f"], "correct": 2, "source": "bank", "expl": "grad f(x*)=0 e' condizione NECESSARIA ma non sufficiente per un minimo locale (potrebbe essere un punto di sella o un massimo). Quindi l'affermazione 'grad f(x*)=0 se e solo se x* e' un minimo locale' e' FALSA: e' vera solo l'implicazione in un verso (necessita', non sufficienza)."}, {"n": 31, "q": "If f: R^2 -> R, f(x1,x2) = 2 sin(x1) + sin(x1) cos(x2), which of the following is NOT a stationary point for f?", "options": ["(0, pi)", "(pi/2, 0)", "(pi/2, pi)"], "correct": 0, "source": "bank", "expl": "Nei punti stazionari le derivate parziali si annullano contemporaneamente. Verificando i punti candidati con df/dx1=2cos(x1)+cos(x1)cos(x2) e df/dx2=-sin(x1)sin(x2): in (0,pi) si ottiene df/dx1 = 2*1 + 1*(-1) = 1 != 0, quindi (0,pi) NON e' un punto stazionario."}, {"n": 32, "q": "If f: R^n -> R, f in C^2(R^n), then x* is a minimum point if and only if:", "options": ["grad f(x*) = 0 and Hessian f(x*) is positive definite", "grad f(x*) = 0", "grad f(x*) = 0 and Hessian f(x*) is positive semi-definite"], "correct": 0, "source": "bank", "expl": "Condizione sufficiente per un minimo (stretto) in un punto C^2: grad f(x*)=0 (condizione del primo ordine) E l'Hessiana in x* definita positiva (condizione del secondo ordine)."}, {"n": 33, "q": "If X is a continuous random variable, which of the following is a possible target space for X?", "options": ["none of the other alternatives", "T = N (the natural numbers)", "T = [1,2] union [3,4]"], "correct": 2, "source": "bank", "expl": "Una variabile aleatoria continua ha come spazio target un insieme NON numerabile (contiene intervalli/unioni di intervalli), a differenza di N che e' numerabile. [1,2]∪[3,4] e' un'unione di intervalli, quindi non numerabile: e' un target space valido per una v.a. continua."}, {"n": 34, "q": "The expected value of a continuous random variable X with target space T=[a,b] is defined as (with p(x) the PDF function):", "options": ["E(x) = integral_a^b x p(x) dx", "E(x) = integral_a^b p(x)/x dx", "E(x) = integral_a^b p(x) dx"], "correct": 0, "source": "bank", "expl": "Il valore atteso di una v.a. continua con densita' p(x) su [a,b] e' per definizione l'integrale di x*p(x) su [a,b], analogo alla Q15."}, {"n": 35, "q": "F_X is the probability mass function (PMF) of a random variable X. Which sentence is TRUE (Omega = sample space, T = target space)?", "options": ["F_X: Omega -> T", "F_X: T -> R", "F_X: Omega -> R"], "correct": 1, "source": "bank", "expl": "La PMF (funzione di massa di probabilita') F_X associa ad ogni valore nel target space T la sua probabilita', quindi F_X: T -> R (un numero reale in [0,1] per ogni elemento di T)."}, {"n": 36, "q": "Given two random variables X and Y such that p(x) = c*e^{-|x|} and p(y|x) = (1/sqrt(2pi)) e^{-(y-ax)^2/2}, then the MAP estimate reads:", "options": ["x* = argmin_x (1/2)(y-ax)^2 + (1/2)x^2", "x* = argmin_x (1/2)(y-ax)^2 + |x|", "x* = argmin_x (1/2)(y-ax)^2"], "correct": 1, "source": "bank", "expl": "Nella stima MAP con prior Laplaciano su x (p(x) ~ exp(-|x|)) e verosimiglianza gaussiana su y dato x, massimizzare il log-posterior equivale a minimizzare 1/2(y-ax)^2 + |x| (il termine di regolarizzazione L1 viene dal prior Laplaciano, non quadratico)."}, {"n": 37, "q": "Suppose a set of data (x_i,y_i), i=1,...,N, y_i = f(x_i) + e_i, with e_i ~ N(0, sigma^2). In linear regression, the likelihood function is:", "options": ["p(y|x,theta) = prod_i N(y_i | x_i^T theta z_i, sigma^2)", "p(y|x,theta) = prod_i N(y_i | x_i^T theta, sigma^2)", "None of the above"], "correct": 1, "source": "bank", "expl": "La verosimiglianza per dati con rumore gaussiano e' il prodotto delle densita' gaussiane di ciascuna osservazione: p(y|x,theta) = prod_i N(y_i | x_i^T theta, sigma^2)."}, {"n": 38, "q": "Let A be the matrix [[1,2,3],[4,5,6],[7,8,9]] (numpy array). What is the output of B = A[:, 1:2]?", "options": ["None of the others", "B = [[2,3],[5,6],[8,9]]", "B = [[1,2,3],[4,5,6]]"], "correct": 0, "source": "bank", "expl": "Come la Q18: A[:,1:2] restituisce una matrice colonna [[2],[5],[8]], che non corrisponde a nessuna delle due opzioni numeriche proposte in questa variante (una aveva i valori sbagliati, l'altra la forma sbagliata): risposta 'nessuna delle altre'."}, {"n": 39, "q": "Importing numpy as np, which instruction creates the array x = [0, 0.1, 0.2, 0.3]?", "options": ["None of the others", "x = np.logspace(0, 0.3)", "x = np.linspace(0, 0.3)"], "correct": 0, "source": "bank", "expl": "np.logspace(0,0.3) genera valori spaziati LOGaritmicamente tra 10^0 e 10^0.3 (non linearmente), e np.linspace(0,0.3) col numero di punti di default (50) non da' affatto [0,0.1,0.2,0.3]. Nessuna delle due genera l'array richiesto: risposta 'nessuna delle altre'."}, {"n": 40, "q": "Importing numpy as np, how to define the temporary variable A such that A = np.reshape(A, (2,2)) returns the matrix [[1,2],[3,4]]?", "options": ["None of the others", "A = np.linspace(1, 4, 4)", "A = np.arange(4)"], "correct": 1, "source": "bank", "expl": "np.linspace(1,4,4) genera [1,2,3,4], che reshape(2,2) da' esattamente [[1,2],[3,4]]. np.arange(4) genera invece [0,1,2,3], che non corrisponde."}, {"n": 41, "q": "In F(10,5,-10,10), the number x = 10.2222... (10.2 periodic) is approximated by:", "options": ["x_hat = 0.10222 · 10^1", "x_hat = 0.10222 · 10^2", "x_hat = 0.01022 · 10^3"], "correct": 1, "source": "bank", "expl": "10.2 periodico = 10.2222...; normalizzato: 1.02222...*10^1, con precisione 5 cifre si tronca a 0.10222*10^2 (equivalente, spostando la virgola di una posizione per la normalizzazione richiesta dalla notazione dell'esercizio)."}, {"n": 42, "q": "The 2-norm of a matrix A = (a_ij) with shape m x n is defined as (where rho(A) is the spectral radius of A):", "options": ["||A||_2 = sqrt(rho(A))", "||A||_2 = sqrt(sum_i sum_j a_ij^2)", "||A||_2 = sqrt(rho(A^T A))"], "correct": 2, "source": "bank", "expl": "La norma 2 di una matrice e' definita come la radice quadrata del raggio spettrale di A^T A: ||A||_2 = sqrt(rho(A^T A)), non del raggio spettrale di A stessa (che vale solo per matrici simmetriche) ne' della somma dei quadrati degli elementi (quella e' Frobenius)."}, {"n": 43, "q": "If A in R^{n x n} is symmetric and positive definite, then ker(A) represents the kernel of A:", "options": ["ker(A) = A^T", "None of the other alternatives", "ker(A) = 0"], "correct": 1, "source": "bank", "expl": "Se A e' simmetrica e definita positiva, tutti i suoi autovalori sono strettamente positivi, quindi A e' invertibile e il suo nucleo (kernel) contiene solo il vettore nullo — ma questo non corrisponde esattamente a nessuna delle due opzioni tecniche proposte (A^T non ha senso come 'kernel', e ker(A)=0 sarebbe corretto ma espresso in modo diverso da quanto atteso): risposta 'nessuna delle altre alternative'."}, {"n": 44, "q": "If x=(3,-1), y=(1/3,1), then:", "options": ["x and y are parallel", "x and y are orthonormal", "x and y are orthogonal"], "correct": 2, "source": "bank", "expl": "x·y = 3*(1/3) + (-1)*1 = 1-1 = 0, quindi i vettori sono ortogonali (prodotto scalare nullo). Non sono paralleli (non sono multipli scalari l'uno dell'altro)."}, {"n": 45, "q": "If V is a vector space with dim(V)=n, U subset V is a subspace with dim(U)=k, and Pi_U: V -> U is a projection. Then:", "options": ["Pi_U(x) in R^n", "Pi_U(x) in R^m (=k)", "Pi_U(x) in R^{n-m}"], "correct": 0, "note": "Risposta ufficiale del docente = (a) R^n (rappresentazione numerica). Lo studente annota che concettualmente/geometricamente riterrebbe corretta la (b) R^m, ma il foglio risposte dell'esame conferma (a).", "source": "bank", "expl": "La proiezione Pi_U(x) di un vettore su un sottospazio U di dimensione k e' numericamente ancora rappresentata come un vettore in R^n (stesso spazio ambiente, solo vincolato a giacere in U): quindi Pi_U(x) in R^n. Concettualmente/geometricamente si potrebbe pensare a R^k, ma la rappresentazione numerica standard resta in R^n."}, {"n": 46, "q": "If A = identity 4x4 matrix, then:", "options": ["K2(A) = 1/2", "K2(A) = 1", "K2(A) = 4"], "correct": 1, "source": "bank", "expl": "Il numero di condizionamento e' sigma_max/sigma_min. Per una matrice identita' (o diagonale con tutti i valori uguali a 1), sigma_max=sigma_min=1, quindi k2(A)=1."}, {"n": 47, "q": "If A = U Sigma V^T is the SVD decomposition of A in R^{m x n}, then the rank-k approximation of A is:", "options": ["A_hat(k) = sum_{i=1}^k A_i, A_i = u_i v_i^T dyad", "A_hat(k) = sum_{i=1}^k sigma_i A_i, A_i = u_i v_i^T dyad", "A_hat(k) = sum_{i=1}^n sigma_i A_i, A_i = u_i v_i^T dyad"], "correct": 1, "source": "bank", "expl": "L'approssimazione di rango k tramite SVD e' A_hat(k) = sum_{i=1}^k sigma_i u_i v_i^T: bisogna sommare SOLO i primi k termini (non tutti gli n) e includere il fattore sigma_i (altrimenti non e' un'approssimazione pesata correttamente)."}, {"n": 48, "q": "A solution of min_x ||Ax-b||_2^2, where A is m x n, m>=n, rank(A)=k<n, can be computed as:", "options": ["A^+ x = b", "A A^T x = A^T b", "x = A^+ b"], "correct": 2, "source": "bank", "expl": "La soluzione ai minimi quadrati di min ||Ax-b||^2 si ottiene tramite la pseudoinversa di Moore-Penrose: x = A^+ b. L'equazione normale A^T A x = A^T b richiede A^T A invertibile (rango pieno), condizione qui non garantita essendo rank(A)=k<n."}, {"n": 49, "q": "If f: R^3 -> R, f(x1,x2,x3) = sin(x1) - sin(x2)cos(x3) + x3^2, then grad f(pi/2, pi/2, pi) equals to:", "options": ["(0,0,pi)", "None of the above", "(0,0,0)"], "correct": 1, "source": "bank", "expl": "grad f = (cos(x1), -cos(x2)cos(x3), sin(x2)sin(x3)+2x3). Valutando in (pi/2,pi/2,pi): cos(pi/2)=0, -cos(pi/2)cos(pi)=0, sin(pi/2)sin(pi)+2pi=0+2pi=2pi. Il risultato (0,0,2pi) non compare tra le opzioni proposte: risposta 'nessuna delle altre'."}, {"n": 50, "q": "If f: R^2 -> R, f(x1,x2) = x1 + x1*x2, g: R^2 -> R^2, g(t1,t2) = (t1,t2), and h(t1,t2) = f(g(t1,t2)), then:", "options": ["grad h(x1,x2) = (2+2x1, 2x1)", "grad h(x1,x2) = (1+2x1^2, 2x1)", "None of the above"], "correct": 2, "source": "bank", "expl": "h(t1,t2)=f(g(t1,t2))=t1+t1*t2 (essendo g l'identita'), quindi grad h=(1+t2, t1). Nessuna delle opzioni proposte corrisponde a questo risultato: 'nessuna delle altre'."}, {"n": 51, "q": "f: R^n -> R is differentiable if:", "options": ["partial f/partial x_i exists and is continuous for any i=1,...,n", "grad f(x) exists", "partial f/partial x_i exists for any i=1,...,n"], "correct": 0, "source": "bank", "expl": "La differenziabilita' di f:R^n->R richiede che le derivate parziali esistano E siano continue in ogni punto (condizione sufficiente per la differenziabilita'). La sola esistenza del gradiente o delle derivate parziali e' necessaria ma non sufficiente."}, {"n": 52, "q": "Let f: R^2 -> R, f(x1,x2) = 9x2^2 - x1, grad f(x1,x2) = (9x2^2 - 1, 18 x1 x2). Then which of the following is a stationary point for f?", "options": ["(0,0)", "None of the above", "(0,3)"], "correct": 1, "source": "bank", "expl": "Ponendo grad f=0: 9x2^2-1=0 -> x2=±1/3, e 18x1x2=0 -> x1=0 (visto che x2!=0). I punti stazionari sono (0,1/3) e (0,-1/3): nessuno dei due coincide con (0,0) o (0,3) proposti, quindi 'nessuna delle altre'."}, {"n": 53, "q": "If f: R^n -> R, f in C^1(R^n) and x* is a minimum point of f, then:", "options": ["grad f(x*) = 0", "grad f(x*) >= 0", "grad f(x*) is positive definite"], "correct": 0, "source": "bank", "expl": "Condizione necessaria del primo ordine per un punto di minimo (locale o globale) di una funzione C^1: il gradiente deve annullarsi, grad f(x*)=0."}, {"n": 54, "q": "Given two random variables X and Y, then the marginal probability on Y is defined as:", "options": ["P(Y=y)", "P(X=x, Y=y)", "P(X=x)"], "correct": 0, "source": "bank", "expl": "La probabilita' marginale su Y si ottiene 'sommando via' (marginalizzando) la variabile X dalla probabilita' congiunta: P(Y=y) = somma_x P(X=x,Y=y). E' quindi semplicemente indicata come P(Y=y), distinta dalla probabilita' congiunta P(X=x,Y=y)."}, {"n": 55, "q": "The mean and standard deviation of a standard normal distribution are, respectively:", "options": ["(0,1)", "(1,1)", "(1,0)"], "correct": 0, "source": "bank", "expl": "Per definizione la distribuzione normale standard N(0,1) ha media 0 e deviazione standard 1."}, {"n": 56, "q": "Given a continuous random variable X: Omega -> T, with T=[0,1], and p(x)=3x^2 the PDF, then:", "options": ["E[X] = 2", "E[X] = 3", "E[X] = 3/4"], "correct": 2, "source": "bank", "expl": "E[X] = integrale su [0,1] di x*3x^2 dx = integrale di 3x^3 dx = [3x^4/4] da 0 a 1 = 3/4."}, {"n": 57, "q": "If X,Y are random variables, the correlation between X and Y is computed as:", "options": ["Corr(X,Y) = Cov(X,Y) / (E(X)E(Y))", "Corr(X,Y) = E(X)E(Y) / Cov(X,Y)", "Corr(X,Y) = Cov(X,Y) / sqrt(Var(X)Var(Y))"], "correct": 2, "source": "bank", "expl": "La correlazione e' la covarianza normalizzata dividendo per il prodotto delle deviazioni standard: Corr(X,Y) = Cov(X,Y) / sqrt(Var(X)*Var(Y)), in modo che il risultato sia sempre compreso tra -1 e 1."}, {"n": 58, "q": "Given two random variables X and Y, Bayes Theorem implies that p(x|y) = p(y|x)p(x)/p(y) where:", "options": ["p(x) is called likelihood on x", "p(x) is called prior distribution on x", "p(x) is called posterior distribution on x"], "correct": 1, "source": "bank", "expl": "Nella formula di Bayes p(x|y) = p(y|x)p(x)/p(y): p(x) e' la distribuzione a priori (prior) su x, prima di osservare y."}, {"n": 59, "q": "In Maximum Likelihood Estimation, the prediction function is:", "options": ["A probabilistic function", "None of the above", "A deterministic function"], "correct": 0, "source": "bank", "expl": "Nella MLE il modello di predizione e' tipicamente probabilistico: si assume una distribuzione di probabilita' sui dati osservati (es. gaussiana per il rumore) e si stimano i parametri che massimizzano la probabilita' di osservare i dati."}, {"n": 60, "q": "Suppose a set of data (x_i,y_i), i=1,...,N, y_i=f(x_i)+e_i, e_i~N(0,sigma^2). In linear regression, the predictor function f is chosen as:", "options": ["f(x,theta) = theta^T x", "None of the above", "f(x,theta) = e^x"], "correct": 0, "source": "bank", "expl": "Nel modello di regressione lineare standard, la funzione predittore e' lineare nei parametri: f(x,theta) = theta^T x."}, {"n": 61, "q": "Given a matrix A in R^{m x n}, m>n, with r=rank(A), then:", "options": ["None of the above", "It is always possible to write A = U Sigma V^T, Sigma in R^{n x n} diagonal, U in R^{m x n}, V in R^{n x n} orthogonal", "It is always possible to write A = U Sigma V^T, Sigma in R^{m x n} diagonal, U in R^{m x m}, V in R^{n x n} orthogonal"], "correct": 2, "source": "bank", "expl": "Per una matrice A in R^{m x n} con m>n, la SVD 'thin/full' si scrive A = U Sigma V^T dove U in R^{m x m} e V in R^{n x n} sono entrambe ortogonali (quadrate), e Sigma in R^{m x n} e' rettangolare 'diagonale' (con zeri fuori dalla diagonale principale, anche nelle righe extra)."}, {"n": 62, "q": "If A is a matrix m x n (m>n), rg(A)=k and sigma_1>=sigma_2>=...>=sigma_n are the singular values of A, which is correct (k2(A) is the condition number of A in norm 2)?", "options": ["None of the other alternatives", "k2(A) = sigma_n/sigma_1", "k2(A) = sigma_1/sigma_n"], "correct": 0, "note": "Poiche' rank(A)=k<n, il singolare minimo non nullo e' sigma_k (non sigma_n, che vale 0), quindi k2(A)=sigma_1/sigma_k: nessuna delle opzioni date corrisponde esattamente.", "source": "bank", "expl": "Poiche' rank(A)=k<n, i valori singolari non nulli sono solo sigma_1,...,sigma_k (sigma_{k+1},...,sigma_n sono zero). Il numero di condizionamento e' quindi sigma_1/sigma_k, che non corrisponde a nessuna delle opzioni proposte (sigma_n/sigma_1 o sigma_1/sigma_n, che userebbero un sigma_n nullo, rendendo il rapporto indefinito): risposta 'nessuna delle altre'."}, {"n": 63, "q": "If A is a matrix m x n (m>n) and A=U Sigma V^T is the SVD of A, A_p = sum_{i=1}^p sigma_i u_i v_i^T, which of the following statements is correct?", "options": ["||A_p||_2 = sigma_p", "A_p has rank p", "None of the other alternatives"], "correct": 1, "source": "bank", "expl": "Il rango dell'approssimazione A_p = sum_{i=1}^p sigma_i u_i v_i^T e' esattamente p (somma di p diadi linearmente indipendenti, assumendo i sigma_i>0): quindi 'A_p ha rango p' e' l'affermazione corretta."}, {"n": 64, "q": "Let f: R^3 -> R, f(x1,x2,x3) = exp(x1*x2) - sin(x3)cos(x2), then grad f(0,0,0) =", "options": ["None of the other alternatives", "(0,0,1)", "(0,0,0)"], "correct": 0, "source": "bank", "expl": "grad f = (x2*exp(x1x2), x1*exp(x1x2)+sin(x2)sin(x3), -cos(x2)cos(x3)). Valutando in (0,0,0): (0*1, 0*1+0*0, -1*1) = (0,0,-1). Nessuna delle opzioni proposte corrisponde: 'nessuna delle altre'."}, {"n": 65, "q": "If f: R^2 -> R, f(x1,x2) = x1 + 2x1^2, g: R -> R^2, g(t) = (t, t^2), and h(t) = f(g(t)), then:", "options": ["None of the other alternatives", "h'(t) = 8t^3 + t", "h'(t) = 4t^3 + 1"], "correct": 0, "source": "bank", "expl": "h(t) = f(g(t)) = t + 2t^2 (sostituendo g(t)=(t,t^2) in f(x1,x2)=x1+2x1^2 dove x1=t): quindi h'(t) = 1+4t, che non coincide con nessuna delle opzioni proposte: 'nessuna delle altre'."}, {"n": 66, "q": "If f(x) = ||Ax-b||_2^2 with A in R^{m x n}, b in R^m, x in R^n, then grad f(0) =", "options": ["None of the other alternatives", "0", "-2 A^T b"], "correct": 2, "source": "bank", "expl": "f(x)=||Ax-b||^2 = x^T A^T A x - 2b^T A x + b^T b. grad f(x) = 2A^T A x - 2A^T b. In x=0: grad f(0) = -2A^T b."}, {"n": 67, "q": "If f: R^n -> R, x* is a global minimum for f, if:", "options": ["f(x) <= f(x*), for all x in R^n", "f(x*) <= f(x), for all x in R^n", "f(x) <= f(x*), for all x: ||x-x*|| < eps, eps>0"], "correct": 1, "source": "bank", "expl": "Un minimo globale x* soddisfa f(x*) <= f(x) per OGNI x nel dominio (non solo in un intorno, come nel caso locale): la disuguaglianza va nel verso 'f(x*) e' minore o uguale a f(x) per ogni x'."}, {"n": 68, "q": "If f: R^2 -> R, f(x1,x2) = 2sin(x1) + sin(x1)cos(x2), which of the following is a stationary point for f?", "options": ["(pi/2, 0)", "None of the other alternatives", "(pi/2, pi/2)"], "correct": 0, "source": "bank", "expl": "df/dx1 = 2cos(x1)+cos(x1)cos(x2), df/dx2 = -sin(x1)sin(x2). In (pi/2,0): df/dx1 = 2*0+0*1=0, df/dx2=-1*0=0. Entrambe si annullano: (pi/2,0) e' un punto stazionario."}, {"n": 69, "q": "Gradient descent methods:", "options": ["Always converges to a minimum of f(x)", "If alpha is suitably chosen, f in C^1, for any x0, always converges to a minimum of f(x)", "If alpha is suitably chosen, f in C^1, for any x0, always converges to a stationary point of f(x)"], "correct": 2, "source": "bank", "expl": "Il gradient descent, con passo alpha scelto opportunamente (es. sufficientemente piccolo o tramite backtracking) e f di classe C^1, converge sempre a un punto STAZIONARIO (grad f=0), non necessariamente a un minimo (potrebbe fermarsi in un punto di sella)."}, {"n": 70, "q": "What is the output of the following Python code? x=np.linspace(1,10,4); for i in range(0,4): print(x[i])", "options": ["1 3 5 7", "0 1 2 3", "None of the others"], "correct": 2, "source": "bank", "expl": "np.linspace(1,10,4) genera 4 punti equispaziati tra 1 e 10: [1, 4, 7, 10]. Questo non corrisponde a nessuna delle sequenze proposte (1,3,5,7 o 0,1,2,3): risposta 'nessuna delle altre'."}, {"n": 71, "q": "Importing numpy as np, how to define the temporary variable A such that A=np.reshape(A,(2,2)) returns the matrix [[1,2],[3,4]]?", "options": ["A = np.arange(4) + 1", "None of the above", "A = np.linspace(1,5,4)"], "correct": 0, "source": "bank", "expl": "np.arange(4) genera [0,1,2,3]; sommando 1 si ottiene [1,2,3,4], che reshape(2,2) da' [[1,2],[3,4]] come richiesto."}, {"n": 72, "q": "If Omega is the sample space, A the event space, and T=[0,1], a random variable X is:", "options": ["A function X: Omega -> T", "A function X: A -> T", "A function X: T -> Omega"], "correct": 0, "source": "bank", "expl": "Una variabile aleatoria X e' per definizione una funzione che mappa lo spazio campionario Omega nello spazio target T: X: Omega -> T."}, {"n": 73, "q": "The quantity of interest in Bayes' theorem is:", "options": ["The posterior", "The likelihood", "The marginal"], "correct": 0, "source": "bank", "expl": "Nel teorema di Bayes, la quantita' di interesse (cio' che si vuole stimare/calcolare) e' tipicamente la distribuzione a posteriori (posterior), che aggiorna le nostre credenze dopo aver osservato i dati."}, {"n": 74, "q": "If X: Omega -> T is a discrete random variable and F_X is the PMF of X, then the distribution mean (expectation) is defined as:", "options": ["E(x) = sum_i x_i F_X(x_i), x_i in T", "E(x) = sum_i F_X(x_i), x_i in T", "E(x) = (1/N) sum_i x_i, x_i in T"], "correct": 0, "source": "bank", "expl": "Il valore atteso di una v.a. discreta con PMF F_X e' la somma pesata dei valori possibili per le rispettive probabilita': E(x) = sum_i x_i * F_X(x_i)."}, {"n": 75, "q": "Given two random variables X and Y such that p(x) = (1/sqrt(2pi)) e^{-x^2/2} and p(y|x) = c e^{-|y-ax|}, then the MLE reads:", "options": ["x* = argmin_x (1/2)(y-ax)^2 + |x|", "x* = argmin_x |y-ax|", "x* = argmin_x (y-ax)^2"], "correct": 1, "source": "bank", "expl": "Con prior gaussiano su x e verosimiglianza laplaciana su y dato x, la MLE (che riguarda solo la verosimiglianza p(y|x), non il prior su x) porta a minimizzare |y-ax| (la stima di massima verosimiglianza dipende dal termine di rumore laplaciano su y, non dal prior gaussiano su x che qui e' irrilevante per la sola MLE)."}, {"n": 76, "q": "The regression matrix A of the data (x_i,y_i), i=1,...,N, y_i in R for a polynomial model of degree k-1 has elements:", "options": ["a_ij = x_i^j, i=1..N, j=1..k", "a_ij = x_i^(j-1), i=1..N, j=1..k", "a_ij = x_i^(-j), i=1..N, j=1..k"], "correct": 1, "source": "bank", "expl": "Per un modello polinomiale di grado k-1, la matrice di regressione ha colonne che sono le potenze crescenti di x_i, partendo da x_i^0=1: a_ij = x_i^(j-1) per j=1,...,k."}, {"n": 77, "q": "Let A be the matrix [[0.1,0.2],[0.3,0.4],[0.5,0.6]]. What is the output of the Python code: B = A[-1:, :]?", "options": ["None of the others", "B = [0.2]", "B = [0.4, 0.6] (column)"], "correct": 0, "source": "bank", "expl": "A[-1,:] seleziona l'ultima riga come vettore 1-D (non come matrice 2-D): il risultato e' [0.5, 0.6], che non corrisponde esattamente al formato/ai valori delle opzioni proposte: 'nessuna delle altre'."}, {"n": 78, "q": "The normalized scientific representation of 3.7856 is:", "options": ["3.7856 · 10^0", "3.7856 · 10^1", "0.37856 · 10^1"], "correct": 0, "note": "Conflitto simile alla Q21: la traccia evidenzia (a) come corretta (unica forma normalizzata valida 1<=|a|<10), ma lo studente annota che la risposta ufficiale d'esame era (c). Verificare col docente.", "source": "bank", "expl": "La rappresentazione scientifica normalizzata richiede 1<=|mantissa|<10: 3.7856 e' gia' in questa forma (3.7856*10^0), quindi e' la rappresentazione corretta. (Nota: come per la Q21, la chiave d'esame riportata differisce — probabile incongruenza nella traccia, verificare col docente)."}, {"n": 79, "q": "In the floating point system F(10,5,-4,4), which is the number preceding x=10^-4?", "options": ["y = 9 · 10^-5", "None of the other alternatives", "y = 10^-5"], "correct": 1, "source": "bank", "expl": "Nel sistema F(10,5,-4,4), i numeri rappresentabili vicino a 10^-4 sono spaziati di un fattore legato alla precisione: il numero immediatamente precedente a 1.0000*10^-4 richiederebbe un esponente piu' piccolo di emin=-4, quindi non e' rappresentabile nel sistema: risposta 'nessuna delle altre alternative'."}, {"n": 80, "q": "Given the matrix A = [[1,0,0],[0,1,0],[0,0,-4]]. Then:", "options": ["||A||_2 = -4", "None of the other alternatives", "||A||_2 = sqrt(198)"], "correct": 1, "source": "bank", "expl": "||A||_2 per una matrice diagonale e' il massimo valore assoluto sulla diagonale: qui i valori sono 1,1,-4, quindi il massimo assoluto e' 4. Questo non corrisponde ne' a -4 ne' a sqrt(198): 'nessuna delle altre'."}, {"n": 81, "q": "The matrix A = [[2,4],[4,8]] is:", "options": ["Symmetric and positive definite", "None of the other alternatives", "Symmetric and positive semidefinite"], "correct": 2, "source": "bank", "expl": "A=[[2,4],[4,8]] e' simmetrica. Il determinante e' 2*8-4*4=0, quindi ha un autovalore nullo (matrice singolare): non puo' essere definita positiva (richiederebbe autovalori tutti strettamente positivi), ma e' semidefinita positiva (autovalori 0 e 10, entrambi >=0)."}, {"n": 82, "q": "The accuracy is:", "options": ["The number of correct significant digits in approximating some quantity", "The number of digits with which a number is expressed", "None of the above"], "correct": 0, "source": "bank", "expl": "L'accuratezza (accuracy) in analisi numerica si riferisce a quanto una approssimazione e' vicina al valore vero, tipicamente misurata dal numero di cifre significative corrette — non dal numero totale di cifre con cui il numero e' scritto."}, {"n": 83, "q": "Given two random variables X and Y, Bayes Theorem implies that p(y|x) = p(x|y)p(y)/p(x) where:", "options": ["p(x|y) is called prior distribution on x", "p(x|y) is called posterior distribution on y", "p(x|y) is called likelihood on y"], "correct": 2, "source": "bank", "expl": "Nella formula p(y|x)=p(x|y)p(y)/p(x): il termine p(x|y) al numeratore rappresenta la verosimiglianza (likelihood) di x dato y, per analogia con la struttura standard del teorema di Bayes."}, {"n": 85, "q": "If f: R^2 -> R, f(x1,x2) = x1*e^{x2}, g: R -> R^2, g(t) = (e^t, t), then if h(t)=f(g(t)): h'(t) = ?", "options": ["h'(t) = t e^t", "h'(t) = 2 e^{2t}", "h'(t) = e^{2t}(t+1)"], "correct": 1, "note": "Conflitto: lo svolgimento dello studente e l'evidenziazione stampata indicano (b), ma lo studente annota che la risposta ufficiale dell'esame mostrava (c). Verificare col docente. NB: Question 84 risulta assente/mancante nel PDF (la numerazione salta da 83 a 85).", "source": "bank", "expl": "h(t)=f(g(t))=e^t * e^t = e^{2t}, quindi h'(t)=2e^{2t}. (Nota: come altre domande di questo tipo, la risposta ufficiale d'esame riportata dallo studente differisce da quella calcolata — probabile incongruenza nella traccia, verificare col docente)."}, {"n": 86, "q": "If f: R^2 -> R, f(x1,x2) = x1^2 + x1*x2, g: R -> R^2, g(t) = (sin(t), cos(t)), then if h(t)=f(g(t)): h'(t) = ?", "options": ["h'(t) = sin(2t) - sin^2(t)", "h'(t) = sin(t) - sin^2(2t)", "h'(t) = sin(t)cos(t) - sin^2(t)"], "correct": null, "note": "NESSUNA risposta corretta indicata nella traccia originale. Lo studente calcola h'(t) = sin(2t) + cos(2t), che non corrisponde a nessuna delle 3 opzioni, e annota 'NO ANSWER AVAILABLE!'. Domanda probabilmente errata/da scartare.", "source": "bank"}, {"n": 87, "q": "If f: R^2 -> R, f(x1,x2) = x1^2 + x2^2, g: R^2 -> R^2, g(x1,x2) = (x2,x1), then if h(x1,x2)=f(g(x1,x2)): grad h(x1,x2) = ?", "options": ["grad h(x1,x2) = (2x1, 2x2)", "grad h(x1,x2) = (2x2, 2x1)", "grad h(x1,x2) = (1,1)"], "correct": 0, "source": "bank", "expl": "h(x1,x2)=f(g(x1,x2))=f(x2,x1)=x2^2+x1^2 (per la simmetria di f(x1,x2)=x1^2+x2^2 rispetto allo scambio delle variabili). grad h = (2x1, 2x2), identico al gradiente di f stessa."}, {"n": 88, "q": "If f: R^2 -> R, f(x1,x2) = x1*e^{x2}, g: R -> R^2, g(t) = (t, log(t)), then if h(t)=f(g(t)): h'(t) = ?", "options": ["h'(t) = t + 1", "h'(t) = t^2 + 1", "h'(t) = 2t"], "correct": 2, "note": "Nessuna evidenziazione stampata visibile nella traccia; risposta dedotta dallo svolgimento dello studente, che nota come in Italia log(x) si intenda come ln(x) (base e), portando a h(t)=t^2 e quindi h'(t)=2t.", "source": "bank", "expl": "Attenzione alla convenzione: in Italia log(x) indica spesso il logaritmo naturale (ln x), non quello in base 10. Con questa convenzione, h(t)=f(g(t))=t*e^{ln t}=t*t=t^2, quindi h'(t)=2t."}, {"n": 89, "q": "If f: R^2 -> R, f(x1,x2) = x1^2 + x1*x2, g: R -> R^2, g(t) = (t^2, t), then h(t) = f(g(t)):", "options": ["h'(t) = t(2t-1)^2 + t", "h'(t) = 4t^2 + 2t + 1", "h'(t) = t(2t+1)^2 - 2t^2"], "correct": null, "note": "NESSUNA risposta corretta indicata. Lo studente calcola h'(t) = 4t^3 + 2t, che non corrisponde a nessuna opzione. Annotato 'NO ANSWER (Again...)'. Domanda probabilmente errata.", "source": "bank"}, {"n": 90, "q": "If f: R^2 -> R, f(x1,x2) = x1^2 + x2^2, g: R^2 -> R^2, g(x1,x2) = (x1*e^{x2}, x2), then h(x1,x2) = f(g(x1,x2)):", "options": ["grad h(x1,x2) = (2x1 e^{x2}(e^{x2}+x1), 2e^{x2})", "grad h(x1,x2) = (2x1 e^{2x2}(e^{x1}+x1), 2x2)", "grad h(x1,x2) = (2x1 e^{x2}(e^{x2}+x1), 2x2)"], "correct": null, "note": "NESSUNA risposta corretta indicata. Lo studente calcola grad h = (2x1 e^(2x2), 2x1^2 e^(2x2) + 2x2), che non corrisponde a nessuna opzione. Annotato 'GUESS WHAT?! NO ANSWER...'. Domanda probabilmente errata.", "source": "bank"}, {"n": 91, "q": "If f: R^2 -> R, f(x1,x2) = x1*x2, g: R -> R^2, g(t) = (t, t^2), then h(t) = f(g(t)):", "options": ["h'(t) = 3t^2", "h'(t) = 3t^3", "h'(t) = t^2"], "correct": 0, "source": "bank", "expl": "h(t)=f(g(t))=t*t^2=t^3, quindi h'(t)=3t^2 (regola di derivazione elementare)."}, {"n": 92, "q": "If A = diag(2,3,2,4) (4x4 diagonal matrix), then:", "options": ["K2(A) = 4", "K2(A) = 2", "K2(A) = 4/3"], "correct": 1, "source": "bank", "expl": "k2(A) per una matrice diagonale e' il rapporto tra il massimo e il minimo valore assoluto sulla diagonale: valori {2,3,2,4}, max=4, min=2, quindi k2(A)=4/2=2."}, {"n": 93, "q": "If vector v=[10^6, 0]^T is approximated by vector v_tilde=[999996, 1]^T, then in the 2-norm the relative error between v and v_tilde is:", "options": ["sqrt(17) · 10^-6", "None of the above", "4 · 10^-6"], "correct": 0, "source": "bank", "expl": "L'errore relativo in norma 2 e' ||v - v_tilde||_2 / ||v||_2. Qui v-v_tilde = (4,-1), con norma sqrt(17); ||v||_2 = 10^6. Quindi l'errore relativo e' sqrt(17)*10^-6."}, {"n": 94, "q": "If A = diag(2,1,2,4) (4x4 diagonal matrix), then:", "options": ["K2(A) = 1/2", "K2(A) = 4", "K2(A) = 2"], "correct": 1, "source": "bank", "expl": "Stesso ragionamento della Q92: valori diagonali {2,1,2,4}, max=4, min=1, quindi k2(A)=4/1=4."}, {"n": 95, "q": "A random variable X: Omega -> T is continuous when:", "options": ["T is countable", "T = R", "Omega is continuous"], "correct": 1, "source": "bank", "expl": "Una variabile aleatoria e' continua quando il suo target space T e' un sottoinsieme non numerabile di R (tipicamente tutto R o un intervallo): T=R e' l'esempio canonico."}, {"n": 96, "q": "A random variable X: Omega -> T is discrete when:", "options": ["T = R", "Omega is countable", "T is countable"], "correct": 2, "source": "bank", "expl": "Una variabile aleatoria e' discreta quando il suo target space T e' un insieme NUMERABILE (finito o numerabile infinito), a differenza del caso continuo dove T e' un continuo di valori."}, {"n": 97, "q": "If A = [[4,2],[1,3]], then:", "options": ["x=(1,2)^T is an eigenvector of A", "x=(2,1)^T is an eigenvector of A", "x=(0,0)^T is an eigenvector of A"], "correct": 1, "source": "bank", "expl": "Per trovare un autovettore si risolve (A-lambda*I)x=0 per un autovalore lambda. Con A=[[4,2],[1,3]], gli autovalori sono lambda=5 e lambda=2 (dal polinomio caratteristico lambda^2-7lambda+10=0). Per lambda=5 si ottiene l'autovettore x=(2,1)^T."}, {"n": 98, "q": "If A = [[4,2],[1,3]], then:", "options": ["lambda=5 is the eigenvalue associated with eigenvector x=(2,1)^T", "lambda=2 is the eigenvalue associated with eigenvector x=(2,1)^T", "lambda=2 is the eigenvalue associated with eigenvector x=(1,2)^T"], "correct": 0, "source": "bank", "expl": "Continuando dalla Q97: per l'autovalore lambda=5 di A=[[4,2],[1,3]], l'autovettore associato e' x=(2,1)^T (risolvendo (A-5I)x=0: -x1+2x2=0 -> x1=2x2)."}, {"n": 99, "q": "If A = diag(4, 2, -1) (3x3 diagonal matrix), then:", "options": ["x=(1,1,0)^T is an eigenvector of A", "x=(0,1,0)^T is an eigenvector of A", "x=(0,-1,1)^T is an eigenvector of A"], "correct": 1, "source": "bank", "expl": "Per una matrice diagonale A=diag(4,2,-1), gli autovettori canonici sono i vettori della base standard: e2=(0,1,0)^T e' autovettore associato all'autovalore 2 (secondo elemento diagonale)."}, {"n": 100, "q": "If A = [[4,0],[0,2]], then:", "options": ["x=(0,0)^T is an eigenvector of A", "x=(1,0)^T is an eigenvector of A", "x=(1,1)^T is an eigenvector of A"], "correct": 1, "source": "bank", "expl": "Per A=diag(4,2), gli autovettori canonici sono (1,0)^T (autovalore 4) e (0,1)^T (autovalore 2). Il vettore (1,0)^T e' quindi un autovettore valido di A."}, {"n": 101, "q": "If A = [[2,0],[0,1]], then:", "options": ["lambda=2 is the eigenvalue associated with eigenvector x=(1,0)^T", "lambda=2 is the eigenvalue associated with eigenvector x=(0,1)^T", "lambda=1 is the eigenvalue associated with eigenvector x=(1,0)^T"], "correct": 0, "source": "bank", "expl": "Per A=diag(2,1), l'autovettore (1,0)^T e' associato all'autovalore 2 (il primo elemento sulla diagonale, corrispondente alla prima componente)."}, {"n": 102, "q": "If A in R^{n x n}, x in R^n and Ax = lambda x for lambda in R, then:", "options": ["For any c in R, c != 0, cx is an eigenvector of A", "cx is an eigenvector of A if and only if c=1", "None of the above"], "correct": 0, "source": "bank", "expl": "Se Ax=lambda*x con x autovettore non nullo, allora per ogni scalare c!=0: A(cx)=c(Ax)=c(lambda x)=lambda(cx), quindi anche cx e' un autovettore (con lo stesso autovalore). Gli autovettori sono definiti a meno di un multiplo scalare non nullo."}, {"n": 103, "q": "If A = diag(2,1,-1) (3x3 diagonal matrix), then:", "options": ["lambda=2 is the eigenvalue associated with eigenvector x=(0,1,0)^T", "lambda=-1 is the eigenvalue associated with eigenvector x=(0,0,1)^T", "lambda=1 is the eigenvalue associated with eigenvector x=(1,0,0)^T"], "correct": 1, "source": "bank", "expl": "Per A=diag(2,1,-1), l'autovalore -1 e' associato all'autovettore della base standard corrispondente alla terza posizione: x=(0,0,1)^T."}, {"n": 104, "q": "In F(10,2,-2,2), if x=pi, y=e, and z = fl(x) - fl(y), then:", "options": ["fl(z) = 0.43 x 10^1", "fl(z) = 0.44 x 10^1", "fl(z) = 0.40 x 10^1"], "correct": null, "note": "NESSUNA risposta corretta indicata. Il calcolo dello studente da' fl(z)=0.4x10^0, che non corrisponde a nessuna delle opzioni (tutte x10^1). Annotato 'NO ANSWER!'.", "source": "bank"}, {"n": 105, "q": "In F(10,2,-2,2), if x=pi, y=e, and z = fl(x) * fl(y), then:", "options": ["fl(z) = 0.84 x 10^1", "fl(z) = 0.0837 x 10^2", "fl(z) = 0.837 x 10^1"], "correct": 0, "source": "bank", "expl": "In F(10,2,-2,2): fl(pi)=3.1*10^0, fl(e)=2.7*10^0. Il prodotto e' 3.1*2.7=8.37, arrotondato/troncato a 2 cifre significative: fl(z)=8.4*10^0=0.84*10^1."}, {"n": 106, "q": "In F(10,6,-3,3), if x=192.403, y=0.635782, and z = fl(x) + fl(y), then:", "options": ["fl(z) = 0.193039 x 10^3", "fl(z) = 0.193038 x 10^3", "fl(z) = 0.193038782 x 10^3"], "correct": 1, "source": "bank", "expl": "In F(10,6,-3,3): x=192.403, y=0.635782. Sommando: 192.403+0.635782=193.038782, che con 6 cifre significative diventa 193.038 = 0.193038*10^3 (la cifra in piu' viene troncata, non arrotondata per eccesso)."}, {"n": 107, "q": "In F(10,2,-2,2), if x=pi, y=e, and z = fl(x) + fl(y), then:", "options": ["fl(z) = 0.585 x 10^1", "fl(z) = 0.58 x 10^1", "fl(z) = 0.59 x 10^1"], "correct": 1, "source": "bank", "expl": "In F(10,2,-2,2): fl(pi)=3.1*10^0, fl(e)=2.7*10^0. Sommando: 3.1+2.7=5.8, quindi fl(z)=5.8*10^0=0.58*10^1."}, {"n": 108, "q": "If f: R^n -> R, f in C^1(R^n), then x* is a minimum point if and only if:", "options": ["grad f(x*) = 0 and Hessian f(x*) is positive semi-definite", "grad f(x*) = 0", "grad f(x*) = 0 and Hessian f(x*) is positive definite"], "correct": 0, "note": "Nella traccia originale risultano evidenziate in verde SIA l'opzione (a) SIA la (c), apparentemente un refuso della prova. Dal punto di vista teorico la condizione necessaria e sufficiente piu' comune insegnata e' semi-definita positiva per un minimo (non stretto); positiva definita garantisce un minimo stretto ma non e' 'if and only if' in generale. Verificare con il docente quale fosse la chiave ufficiale.", "source": "bank", "expl": "Condizione sufficiente (e qui trattata come 'se e solo se') per un punto di minimo con f di classe C^1: grad f(x*)=0 e l'Hessiana in x* semidefinita positiva e' la condizione piu' debole tra le due proposte come 'corrette' nella traccia (probabile refuso del testo originale, che marcava sia questa sia la versione con Hessiana definita positiva: quest'ultima garantisce un minimo stretto, non generico)."}, {"n": 109, "q": "Gradient descent methods solve the optimization problem min_x f(x) by:", "options": ["Generating a sequence {x_k} such that, given x0, computes x_{k+1} = x_k - alpha*grad f(x_k) for alpha>0 step-size", "Generating a sequence {x_k} such that, given x0, computes x_{k+1} = x_k + alpha*grad f(x_k) for alpha>0 step-size", "Generating a sequence {x_k} such that, given x0, computes x_{k+1} = x_k - alpha*grad f(x_k) for alpha!=0 step-size"], "correct": 0, "source": "bank", "expl": "Il gradient descent aggiorna iterativamente x_{k+1} = x_k - alpha*grad f(x_k), muovendosi nella direzione OPPOSTA al gradiente (che punta verso la crescita piu' ripida) con un passo positivo alpha>0."}, {"n": 110, "q": "A fair six-sided die is rolled twice. Define the random variable X as the number of times the face \"3\" appears in the two rolls. What is the target space of X?", "options": ["{0, 1, 2}", "{1, 2, 3}", "{0, 1}"], "correct": 0, "source": "esame", "expl": "X conta quante volte esce '3' su 2 lanci: puo' non uscire mai, uscire una volta o uscire in entrambi i lanci. Quindi il target space e' {0,1,2}."}, {"n": 111, "q": "If A has shape (10, 5), what is the shape of the array returned by A.mean(axis=1)?", "options": ["(5,)", "(10,)", "(10, 5)"], "correct": 1, "source": "esame", "expl": "A.mean(axis=1) calcola la media lungo l'asse delle colonne (asse 1), riducendo quella dimensione: da shape (10,5) si ottiene shape (10,) — una media per ogni riga."}, {"n": 112, "q": "The scientific representation of 0.0000234 is:", "options": ["23.4 × 10^-6", "2.34 × 10^-5", "0.234 × 10^-4"], "correct": 1, "source": "esame", "expl": "0.0000234 = 2.34 * 10^-5: si sposta la virgola di 5 posizioni per ottenere una mantissa con una sola cifra non nulla prima della virgola (forma normalizzata 1<=|mantissa|<10)."}, {"n": 113, "q": "In the linear regression model, the noise terms e_i and e_j for i != j are assumed to be independent. Mathematically, this implies:", "options": ["E[e_i] = E[e_j]", "Cov(e_i, e_j) = 0", "Var(e_i) = Var(e_j)"], "correct": 1, "source": "esame", "expl": "L'indipendenza statistica tra due variabili aleatorie implica che la loro covarianza sia nulla: Cov(e_i,e_j)=0. (L'implicazione inversa non vale in generale: covarianza zero non implica indipendenza, tranne nel caso gaussiano)."}, {"n": 114, "q": "Which of the following numbers is exactly representable in F(10, 5, -10, 10)?", "options": ["123.456", "sqrt(2)", "0.0012345"], "correct": 2, "source": "esame", "expl": "In F(10,5,-10,10) con precisione 5 cifre: 123.456 richiede 6 cifre significative (non rappresentabile esattamente), sqrt(2) e' irrazionale (infinite cifre), mentre 0.0012345 ha esattamente 5 cifre significative e un esponente (-3) ben dentro il range [-10,10]: e' rappresentabile esattamente."}, {"n": 115, "q": "If x = (2, 3) and y = (-3, 2), then:", "options": ["x and y are orthonormal", "x and y are parallel", "x and y are orthogonal"], "correct": 2, "source": "esame", "expl": "x·y = 2*(-3)+3*2 = -6+6 = 0: prodotto scalare nullo, quindi i vettori sono ortogonali."}, {"n": 116, "q": "If A in R^{n x n} is symmetric and positive defined, then:", "options": ["all eigenvalues are real and non-negative", "at least one eigenvalue is zero", "all eigenvalues are real and positive"], "correct": 2, "source": "esame", "expl": "Per una matrice simmetrica e definita positiva, tutti gli autovalori sono reali (per la simmetria) e strettamente positivi (per la definita positivita', per definizione x^T A x>0 per ogni x!=0)."}, {"n": 117, "q": "Given X continuous on [a,b] with PDF p(x), the mean is computed as:", "options": ["integral_a^b p(x) dx", "integral_a^b x p(x) dx", "integral_a^b p(x)/x dx"], "correct": 1, "source": "esame", "expl": "Il valore atteso (media) di una v.a. continua con densita' p(x) su [a,b] e' per definizione l'integrale di x*p(x) su [a,b] (non solo di p(x), che darebbe sempre 1)."}, {"n": 118, "q": "If P(X <= a) = 0.3, then P(X > a) must be:", "options": ["Cannot be determined", "0.3", "0.7"], "correct": 2, "source": "esame", "expl": "Per una v.a. binaria (o eventi complementari), le probabilita' devono sommare a 1: se P(X<=a)=0.3, allora P(X>a)=1-0.3=0.7."}, {"n": 119, "q": "Compute the Hessian of f(x,y) = sin(xy).", "options": ["H = [[-y^2 sin(xy), cos(xy) - xy sin(xy)], [cos(xy) - xy sin(xy), -x^2 sin(xy)]]", "(opzione illeggibile nell'estrazione PDF originale)", "(opzione illeggibile nell'estrazione PDF originale)"], "correct": 0, "source": "esame", "note": "Le opzioni b e c non erano leggibili nel PDF di origine (errore di estrazione testo); solo la risposta corretta era recuperabile con certezza.", "expl": "Per f(x,y)=sin(xy): f_x=y*cos(xy), f_y=x*cos(xy). Derivando ancora: f_xx=-y^2*sin(xy), f_yy=-x^2*sin(xy), f_xy=f_yx=cos(xy)-xy*sin(xy). L'Hessiana e' [[-y^2 sin(xy), cos(xy)-xy sin(xy)],[cos(xy)-xy sin(xy), -x^2 sin(xy)]]."}, {"n": 120, "q": "A fair six-sided die is rolled once. Let the random variable X denote the value observed on the die. Which of the following sets represents the target space of X?", "options": ["{1, 3, 5}", "{1, 2, 3, 4, 5, 6}", "{0, 1, 2, 3, 4, 5, 6}"], "correct": 1, "source": "esame", "expl": "Un dado a 6 facce puo' assumere i valori 1,2,3,4,5,6: il target space e' esattamente questo insieme finito, senza lo 0."}, {"n": 121, "q": "If A is orthogonal:", "options": ["none of the other alternatives", "A must be diagonal", "A cannot have determinant -1"], "correct": 0, "source": "esame", "expl": "Se A e' ortogonale, A^T A = I, quindi det(A)^2=1, cioe' det(A)=+1 o -1 (entrambi possibili). A non deve essere ne' diagonale ne' escludere il determinante -1: nessuna delle due affermazioni specifiche e' vera in generale."}, {"n": 122, "q": "For f(x,y) = x^2 + 2xy + y^2, the point (0,0) is:", "options": ["A saddle point", "A local minimum", "A local maximum"], "correct": 1, "source": "esame", "expl": "L'Hessiana di f(x,y)=x^2+2xy+y^2=(x+y)^2 e' [[2,2],[2,2]], con autovalori 0 e 4 (semidefinita positiva). Poiche' f(x,y)=(x+y)^2>=0=f(0,0) ovunque, (0,0) e' comunque un punto di minimo (non stretto)."}, {"n": 123, "q": "Given A = np.array([[1, 2, 3], [4, 5, 6]]) (shape 2x3), what is A.sum(axis=0)?", "options": ["[6, 15]", "[3, 4, 5]", "[5, 7, 9]"], "correct": 2, "source": "esame", "expl": "A.sum(axis=0) somma lungo le righe (asse 0), producendo un vettore con una entry per colonna: colonna1=1+4=5, colonna2=2+5=7, colonna3=3+6=9 → [5,7,9]."}, {"n": 124, "q": "A NumPy array A has N rows. Which index expression selects the last row?", "options": ["A[:, -1]", "A[-1]", "A[N]"], "correct": 1, "source": "esame", "expl": "Per selezionare l'ultima riga di un array 2D si usa l'indice negativo -1 sulla prima dimensione: A[-1] (equivalente a A[-1,:])."}, {"n": 125, "q": "A necessary condition for x* to be a stationary point is:", "options": ["grad f(x*) = 0", "grad f(x*) > 0", "grad f(x*)^2 is invertible"], "correct": 0, "source": "esame", "expl": "La condizione necessaria del primo ordine per un punto stazionario x* di una funzione differenziabile e' che il gradiente si annulli: grad f(x*)=0."}, {"n": 126, "q": "The Frobenius norm of A = [[2,1,0],[3,-2,0]] is:", "options": ["sqrt(14)", "sqrt(18)", "18"], "correct": 1, "source": "esame", "expl": "Norma di Frobenius = radice quadrata della somma dei quadrati di tutti gli elementi: sqrt(2^2+1^2+0^2+3^2+(-2)^2+0^2)=sqrt(4+1+0+9+4+0)=sqrt(18)."}, {"n": 127, "q": "The 2-norm of the matrix A = I (3x3 identity matrix), defined with the spectral radius, is:", "options": ["1", "3", "sqrt(3)"], "correct": 0, "source": "esame", "expl": "Per la matrice identita' (o qualunque matrice ortogonale), tutti i valori singolari valgono 1, quindi il raggio spettrale di A^T A (=I) e' 1, e la norma 2 e' sqrt(1)=1."}, {"n": 128, "q": "Maximum Likelihood Estimation is mathematically equivalent to Maximum A Posteriori (MAP) estimation when the prior p(theta) is:", "options": ["Gaussian N(0,1)", "Uniform", "Exponential Exp(1)"], "correct": 1, "source": "esame", "expl": "MLE e MAP coincidono quando il prior p(theta) e' costante su tutto il dominio (distribuzione uniforme non informativa): il termine di prior non influenza la posizione del massimo, e MAP si riduce a MLE."}, {"n": 129, "q": "For real matrices A:", "options": ["Singular values are real and nonnegative", "Singular values are eigenvalues of A", "Singular values may be complex"], "correct": 0, "source": "esame", "expl": "Per definizione, i valori singolari di una qualsiasi matrice reale sono le radici quadrate (non negative) degli autovalori di A^T A: sono sempre reali e >=0."}, {"n": 130, "q": "The 2-norm of the matrix A = diag(-1, 5, -2) (3x3 diagonal matrix), defined with the spectral radius, is:", "options": ["2", "sqrt(30)", "5"], "correct": 2, "source": "esame", "expl": "||A||_2 per una matrice diagonale (qui diag(-1,5,-2)) e' il massimo valore assoluto sulla diagonale: max(|-1|,|5|,|-2|)=5."}, {"n": 131, "q": "A fair die is rolled. If X is the outcome minus 3, what is its target space?", "options": ["{1,2,3,4,5,6}", "{-2,-1,0,1,2,3}", "{1,2,3}"], "correct": 1, "source": "esame", "expl": "Se X e' il risultato del dado meno 3, e il dado da' {1,...,6}, allora X assume i valori {1-3,...,6-3} = {-2,-1,0,1,2,3}."}, {"n": 132, "q": "If X and Y are statistically independent, their conditional probability satisfies:", "options": ["p(x|y) = p(x)", "p(x|y) = 0", "p(x|y) = p(y|x)"], "correct": 0, "source": "esame", "expl": "Per variabili indipendenti, la probabilita' condizionata si riduce alla probabilita' marginale: p(x|y)=p(x) (conoscere y non da' informazione su x)."}, {"n": 133, "q": "The matrix A = [[7,14],[14,28]] is:", "options": ["none of the other alternatives", "symmetric and positive definite", "symmetric and positive semidefinite"], "correct": 2, "source": "esame", "expl": "A=[[7,14],[14,28]] e' simmetrica. Il determinante e' 7*28-14*14=0 (un autovalore nullo), quindi non e' definita positiva ma solo semidefinita positiva (l'altro autovalore, 35, e' positivo)."}, {"n": 134, "q": "The number x = 7.5̰6 (periodico) in F(10,4,-5,5) is approximated by:", "options": ["none of the other alternatives", "x_tilde = 0.7566", "x_tilde = 0.7560 · 10^1"], "correct": 0, "source": "esame", "expl": "x=7.5(6 periodico)=7.5666... In F(10,4,-5,5) con 4 cifre significative, il valore troncato non coincide esattamente con nessuna delle rappresentazioni proposte: risposta 'nessuna delle altre alternative'."}, {"n": 135, "q": "In parameter estimation, MLE and MAP differ because:", "options": ["MLE includes prior information", "MAP ignores prior information", "MAP maximizes posterior probability, while MLE maximizes likelihood"], "correct": 2, "source": "esame", "expl": "MLE massimizza solo la verosimiglianza p(dati|theta); MAP massimizza il posterior p(theta|dati) che include anche il prior p(theta). Questa e' la differenza fondamentale tra i due metodi."}, {"n": 136, "q": "The eigenvalues of the matrix A = [[2,1],[0,3]] are:", "options": ["lambda1=2, lambda2=1", "lambda1=2, lambda2=3", "lambda1=3, lambda2=1"], "correct": 1, "source": "esame", "expl": "Il polinomio caratteristico di A=[[2,1],[0,3]] (matrice triangolare) ha come autovalori direttamente gli elementi sulla diagonale: lambda1=2, lambda2=3."}, {"n": 137, "q": "A continuous random variable X with density p_X(x) must satisfy:", "options": ["integral_R p_X(x) dx = 1", "integral_R p_X(x) dx = infinity", "integral_R p_X(x) dx = 0"], "correct": 0, "source": "esame", "expl": "Ogni densita' di probabilita' valida deve integrare a 1 su tutto il dominio (assioma di normalizzazione): integrale su R di p_X(x)dx = 1."}, {"n": 138, "q": "If A has shape (5,5), and you execute A.sum(axis=1, keepdims=True), what is the shape of the output?", "options": ["(5,1)", "(5,)", "(1,5)"], "correct": 0, "source": "esame", "expl": "A.sum(axis=1, keepdims=True) somma lungo le colonne (asse 1) MANTENENDO la dimensione ridotta come asse di lunghezza 1: da shape (5,5) si ottiene shape (5,1) invece di (5,)."}, {"n": 139, "q": "For a dataset with N observations, the joint likelihood p(y|X,theta) is a scalar function of which variable?", "options": ["The input matrix X (of dimension N x D)", "The parameter vector theta (of dimension D)", "The observation vector y (of dimension N)"], "correct": 1, "source": "esame", "expl": "La verosimiglianza congiunta p(y|X,theta) e' una funzione scalare che dipende dal vettore dei parametri theta: e' theta che si fa variare per massimizzarla, mentre X e y sono i dati osservati (fissi)."}, {"n": 140, "q": "The normalized scientific representation of 0.000000567 is:", "options": ["5.67 × 10^-7", "0.567 × 10^-6", "56.7 × 10^-8"], "correct": 1, "source": "esame", "expl": "0.000000567 ha l'esponente determinato contando le posizioni fino alla prima cifra significativa. Segui la chiave ufficiale della traccia (0.567*10^-6): puo' riflettere una convenzione di normalizzazione diversa da quella con mantissa singola cifra."}, {"n": 141, "q": "The Frobenius norm of A = [[2,0,-2],[1,3,0]] is:", "options": ["sqrt(14)", "sqrt(18)", "18"], "correct": 1, "source": "esame", "expl": "Norma di Frobenius: sqrt(2^2+0^2+(-2)^2+1^2+3^2+0^2) = sqrt(4+0+4+1+9+0) = sqrt(18)."}, {"n": 142, "q": "For f(x,y) = x^2 + y^2 - 2x, the stationary point is:", "options": ["(1,0)", "No stationary points", "(0,0)"], "correct": 0, "source": "esame", "expl": "f(x,y)=x^2+y^2-2x. grad f = (2x-2, 2y). Ponendo a zero: x=1, y=0. Il punto stazionario e' (1,0)."}, {"n": 143, "q": "An array A has the shape (5, 1, 10). What is the dimensionality (rank) of the array, represented by A.ndim?", "options": ["3", "50", "2"], "correct": 0, "source": "esame", "expl": "A.ndim restituisce il numero di assi (dimensioni) dell'array, indipendentemente dalla loro lunghezza: per shape (5,1,10) ci sono 3 assi, quindi A.ndim=3."}, {"n": 144, "q": "In the SVD decomposition, matrix A equals:", "options": ["sum sigma_i^2 u_i v_i^T", "sum lambda_i u_i v_i^T", "sum sigma_i u_i v_i^T"], "correct": 2, "source": "esame", "expl": "La decomposizione SVD ricostruisce la matrice originale come somma pesata delle diadi u_i v_i^T, pesate dai valori singolari sigma_i: A = sum_i sigma_i u_i v_i^T (non sigma_i^2, ne' pesata dagli autovalori lambda_i)."}, {"n": 145, "q": "If A is orthogonal:", "options": ["A must be symmetric", "A^T A = 2I", "none of the other alternatives"], "correct": 2, "source": "esame", "expl": "Se A e' ortogonale, A^T A = I per definizione — questo non implica che A sia simmetrica, ne' che A^T A = 2I: nessuna delle due affermazioni specifiche e' vera in generale."}, {"n": 146, "q": "If the Hessian grad^2 f(x*) has both positive and negative eigenvalues:", "options": ["x* is a minimum", "x* is a maximum", "x* is a saddle point"], "correct": 2, "source": "esame", "expl": "Se l'Hessiana ha sia autovalori positivi che negativi, la funzione cresce in alcune direzioni e decresce in altre attorno al punto: e' la definizione di punto di sella."}, {"n": 147, "q": "While type(A) returns numpy.ndarray, which attribute is used to check the data type of the elements stored within the array (e.g. int64 or float32)?", "options": ["A.itemsize", "A.shape", "A.dtype"], "correct": 2, "source": "esame", "expl": "A.dtype restituisce il tipo di dato degli elementi memorizzati nell'array (es. int64, float32); A.shape da' le dimensioni, A.itemsize la dimensione in byte di un singolo elemento."}, {"n": 148, "q": "Compute the Hessian of f(x,y) = x^4 + y^4.", "options": ["[[4x^3, 0], [0, 4y^3]]", "[[12x^2, 0], [0, 12y^2]]", "[[12x^2, 0], [0, 12y^2]]"], "correct": 1, "source": "esame", "note": "Nel PDF originale le opzioni b e c risultano visivamente identiche (probabile refuso/duplicato nel testo dell'esame): entrambe riportano [[12x^2,0],[0,12y^2]], che e' la risposta corretta. Se all'esame le vedi diverse, scegli comunque la matrice diag(12x^2, 12y^2).", "expl": "Per f(x,y)=x^4+y^4: f_x=4x^3 → f_xx=12x^2; f_y=4y^3 → f_yy=12y^2; f_xy=f_yx=0 (variabili separate, nessun termine misto). L'Hessiana e' diag(12x^2, 12y^2)."}];
+</script>
+<script>
+// ---- lightweight math renderer (no external deps, works offline) ----
+// Converts our ASCII math notation (x^2, sqrt(18), [[1,2],[3,4]], lambda, ->...)
+// into readable HTML with real sup/sub/brackets, while leaving normal
+// English words untouched (safe for mixed text like "Let f: R^2 -> R, ...").
+
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function convertMatrix(inner, rows){
+  // rows: array of strings like "1,2,3"
+  const cells = rows.map(r => r.split(',').map(c=>c.trim()));
+  let html = '<span class="matrix-wrap"><table class="mtable">';
+  cells.forEach(row=>{
+    html += '<tr>' + row.map(c=>`<td>${renderInline(c)}</td>`).join('') + '</tr>';
+  });
+  html += '</table></span>';
+  return html;
+}
+
+function extractMatrices(s){
+  // 3-row matrices first (more specific), then 2-row
+  s = s.replace(/\[\[([^\[\]]+)\],\s*\[([^\[\]]+)\],\s*\[([^\[\]]+)\]\]/g,
+    (m, r1, r2, r3) => convertMatrix(m, [r1, r2, r3]));
+  s = s.replace(/\[\[([^\[\]]+)\],\s*\[([^\[\]]+)\]\]/g,
+    (m, r1, r2) => convertMatrix(m, [r1, r2]));
+  return s;
+}
+
+function convertSqrt(s){
+  // sqrt(...) with simple (non-nested-paren) argument
+  return s.replace(/sqrt\(([^()]+)\)/g, (m, arg) =>
+    `<span class="msqrt"><span class="rad">&#8730;</span><span class="arg">${renderInline(arg)}</span></span>`);
+}
+
+const GREEK = {
+  lambda:'\u03bb', Lambda:'\u039b',
+  sigma:'\u03c3', Sigma:'\u03a3',
+  theta:'\u03b8', Theta:'\u0398',
+  pi:'\u03c0', Pi:'\u03a0',
+  epsilon:'\u03b5',
+  alpha:'\u03b1', beta:'\u03b2',
+  mu:'\u03bc', rho:'\u03c1',
+  phi:'\u03c6', Phi:'\u03a6',
+  omega:'\u03c9', Omega:'\u03a9',
+  delta:'\u03b4', Delta:'\u0394',
+};
+
+// custom "word boundary" that also breaks on _ ^ and digits directly after a word,
+// since JS's native \b treats "_" as a word character (so "sigma_1" would NOT match \bsigma\b).
+function wordReplace(s, word, repl){
+  const re = new RegExp('(?<![A-Za-z])' + word + '(?![A-Za-z])', 'g');
+  return s.replace(re, repl);
+}
+
+function convertSymbolsBase(s){
+  // "3x3", "2x3" (no spaces, dimension shorthand) -> times sign, BEFORE the implicit
+  // subscript pass mistakes it for "x" + subscript digit.
+  s = s.replace(/\b(\d+)x(\d+)\b/g, '$1\u00d7$2');
+  // greek words -> unicode
+  Object.keys(GREEK).forEach(word=>{
+    s = wordReplace(s, word, GREEK[word]);
+  });
+  // blackboard R (real numbers) -- always used as the domain symbol in this deck
+  s = wordReplace(s, 'R', '\u211d');
+  // operators / arrows
+  s = s.replace(/->/g, '\u2192');
+  s = s.replace(/<=/g, '\u2264');
+  s = s.replace(/>=/g, '\u2265');
+  s = s.replace(/!=/g, '\u2260');
+  s = wordReplace(s, 'infinity', '\u221e');
+  s = s.replace(/(?<!\.)(?<![A-Za-z])grad(?![A-Za-z])\s+/g, '\u2207');
+  s = wordReplace(s, 'integral', '\u222b');
+  s = s.replace(/(?<!\.)(?<![A-Za-z])sum(?![A-Za-z])/g, '\u2211');
+  return s;
+}
+
+function convertDimensionProducts(s){
+  // ONLY used inside sup/sub/matrix content (e.g. R^{m x n}), never on full sentences,
+  // to avoid mangling a lone integration/loop variable "x" between two words.
+  s = s.replace(/\b([a-zA-Z0-9])\s+x\s+([a-zA-Z0-9])\b/g, '$1\u00d7$2');
+  return s;
+}
+
+function convertImplicitSubscripts(s){
+  // turns e.g. "x1", "k2", "sigma3" (single-letter-run NOT already subscripted) into <sub>.
+  // Negative lookbehind on a preceding letter avoids mangling words like "float32" or "int64".
+  return s.replace(/(?<![A-Za-z])([A-Za-z])([0-9]{1,2})\b/g, (m, letter, digits) =>
+    `${letter}<sub>${digits}</sub>`);
+}
+
+function convertSupSub(s){
+  // superscripts: ^{...} or ^token (letters/digits/minus)
+  s = s.replace(/\^\{([^{}]+)\}/g, (m, g) => `<sup>${renderInline(g)}</sup>`);
+  s = s.replace(/\^(-?[A-Za-z0-9]+)/g, (m, g) => `<sup>${g}</sup>`);
+  // subscripts: _{...} or _token
+  s = s.replace(/_\{([^{}]+)\}/g, (m, g) => `<sub>${renderInline(g)}</sub>`);
+  s = s.replace(/_(-?[A-Za-z0-9]+)/g, (m, g) => `<sub>${g}</sub>`);
+  return s;
+}
+
+// renderInline: used recursively for content already inside a sup/sub/matrix cell
+// (here it's safe to also resolve "m x n" style dimension products)
+function renderInline(s){
+  s = convertSymbolsBase(s);
+  s = convertDimensionProducts(s);
+  s = convertSupSub(s);
+  return s;
+}
+
+function mathText(raw){
+  if(!raw) return '';
+  let s = escapeHtml(raw);
+  // IMPORTANT: do all plain-text symbol substitutions (>=, <=, !=, arrows, greek...)
+  // BEFORE inserting any HTML tags (sup/sub/matrix) -- otherwise a raw ">" that closes
+  // a tag we just inserted can accidentally combine with a following "=" in the source
+  // text and get mangled by the ">=" -> "\u2265" replacement, corrupting the tag.
+  s = convertSymbolsBase(s);
+  s = extractMatrices(s);
+  s = convertSqrt(s);
+  s = convertImplicitSubscripts(s);
+  s = convertSupSub(s);
+  return s;
+}
+
+
+// ---- overfit.trainer -------------------------------------------------
+const ALL_SCORED  = QUESTIONS.filter(q => q.correct !== null);
+const FLAGGED     = QUESTIONS.filter(q => q.correct === null);
+const STORE_KEY = 'overfit-trainer-state-v2';
+
+let srcFilter = 'all'; // 'all' | 'bank' | 'esame'
+let SCORED = ALL_SCORED;
+
+function applyFilter(f){
+  srcFilter = f;
+  SCORED = f === 'all' ? ALL_SCORED : ALL_SCORED.filter(q => q.source === f);
+  document.querySelectorAll('.filt').forEach(b=> b.classList.toggle('active', b.dataset.src === f));
+  state.deck = buildDeck(state, true);
+  state.pos = 0;
+  state.epochSeen = 0;
+  state.epochCorrect = 0;
+  saveState();
+  renderQuestion();
+}
+
+let state = null; // loaded async
+
+const el = id => document.getElementById(id);
+
+// ---------- persistence -------------------------------------------------
+function freshState(){
+  return {
+    stats: {},          // { [n]: {seen:0, correct:0} }
+    epoch: 1,
+    history: [],         // [{epoch, acc}]
+    deck: [],            // array of question numbers for this epoch
+    pos: 0,
+    epochSeen: 0,
+    epochCorrect: 0,
+    totalSeen: 0,
+    totalCorrect: 0,
+    streak: 0,
+  };
+}
+
+async function loadState(){
+  try{
+    const res = await window.storage.get(STORE_KEY, false);
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      if(parsed && parsed.deck && parsed.deck.length) return parsed;
+    }
+  }catch(e){ /* no saved state yet */ }
+  const s = freshState();
+  s.deck = buildDeck(s, true);
+  return s;
+}
+
+async function saveState(){
+  try{
+    await window.storage.set(STORE_KEY, JSON.stringify(state), false);
+  }catch(e){ console.warn('storage save failed', e); }
+}
+
+// ---------- deck building (this is the "overfitting" mechanic) ---------
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+function buildDeck(s, isFirst){
+  let pool = [];
+  SCORED.forEach(q=>{
+    const st = s.stats[q.n];
+    let reps = 1;
+    if(!isFirst && st && st.seen > 0){
+      const acc = st.correct / st.seen;
+      // weaker questions repeat more: 0% acc -> 4x, 100% acc -> 1x
+      reps = 1 + Math.round((1-acc) * 3);
+    }
+    for(let i=0;i<reps;i++) pool.push(q.n);
+  });
+  return shuffle(pool);
+}
+
+// ---------- rendering -----------------------------------------------
+function fmtPct(c, s){
+  if(s===0) return '–';
+  return Math.round(100*c/s) + '%';
+}
+
+function renderStats(){
+  el('epochLabel').textContent = `epoch ${state.epoch}`;
+  el('statSeen').textContent = state.totalSeen;
+  el('statAcc').textContent = fmtPct(state.totalCorrect, state.totalSeen);
+  const lossCount = state.totalSeen - state.totalCorrect;
+  el('statLoss').textContent = state.totalSeen ? fmtPct(lossCount, state.totalSeen) : '–';
+  el('statStreak').textContent = state.streak;
+  el('setSize').textContent = `/ ${SCORED.length} domande`;
+}
+
+function renderCurve(){
+  const svg = el('curveSvg');
+  const hist = state.history.slice(-20);
+  if(hist.length < 1){
+    el('curveHint').textContent = '— completa un epoch per vedere la curva';
+    svg.innerHTML = '';
+    return;
+  }
+  el('curveHint').textContent = hist.map(h=>Math.round(h.acc*100)+'%').join(' · ');
+  const W = 700, H = 64, pad = 6;
+  const n = hist.length;
+  const stepX = n>1 ? (W-2*pad)/(n-1) : 0;
+  let pts = hist.map((h,i)=>{
+    const x = pad + stepX*i;
+    const y = H - pad - h.acc*(H-2*pad);
+    return [x,y];
+  });
+  let path = pts.map((p,i)=> (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  let dots = pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" fill="var(--accent)"/>`).join('');
+  svg.innerHTML = `
+    <line x1="0" y1="${H-pad}" x2="${W}" y2="${H-pad}" stroke="var(--line)" stroke-width="1"/>
+    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+    ${dots}
+  `;
+}
+
+function renderWeak(){
+  const rows = SCORED
+    .map(q => ({q, st: state.stats[q.n]}))
+    .filter(x => x.st && x.st.seen >= 1)
+    .sort((a,b)=> (a.st.correct/a.st.seen) - (b.st.correct/b.st.seen))
+    .slice(0, 10);
+  if(!rows.length){
+    el('weakList').innerHTML = `<div style="color:var(--ink-faint);font-size:12.5px;padding:6px 0;">rispondi a qualche domanda per iniziare a vedere dove sbagli di più.</div>`;
+    return;
+  }
+  el('weakList').innerHTML = rows.map(({q,st})=>{
+    const pct = Math.round(100*st.correct/st.seen);
+    const preview = q.q.length>54 ? q.q.slice(0,54)+'…' : q.q;
+    return `<div class="weakrow"><b>Q${q.n}</b>&nbsp;— ${mathText(preview)}<span class="pct">${st.correct}/${st.seen} · ${pct}%</span></div>`;
+  }).join('');
+
+  if(FLAGGED.length){
+    el('weakList').innerHTML += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);">escluse dal punteggio — nessuna risposta certa nell'originale</div>` +
+      FLAGGED.map(q => {
+        const preview = q.q.length>70 ? q.q.slice(0,70)+'…' : q.q;
+        return `<div class="weakrow"><b>Q${q.n}</b>&nbsp;— ${mathText(preview)}<span class="pct" style="color:var(--warn)">?</span></div>`;
+      }).join('');
+  }
+}
+
+let locked = false;
+
+function renderQuestion(){
+  locked = false;
+  if(state.pos >= state.deck.length){
+    renderEpochDone();
+    return;
+  }
+  const n = state.deck[state.pos];
+  const q = SCORED.find(x=>x.n===n);
+  const hasNote = !!q.note;
+  const hasExpl = !!q.expl;
+  const srcLabel = q.source === 'esame' ? '📝 esame reale' : '📓 banca scritta';
+  const srcClass = q.source === 'esame' ? 'src exam' : 'src';
+
+  el('card').innerHTML = `
+    <div class="qmeta">
+      <span class="qtag"><b>Q${q.n}</b> · domanda ${state.pos+1} / ${state.deck.length} (epoch ${state.epoch})</span>
+      <span class="badges">
+        <span class="${srcClass}">${srcLabel}</span>
+        <span class="flag ${hasNote?'show':''}">⚠ controversa</span>
+        <button class="hintBtn" id="hintBtn" title="come si svolge?" ${hasExpl?'':'disabled style="opacity:.25;cursor:default;"'}>?</button>
+      </span>
+    </div>
+    <div class="hintbox" id="hintbox">
+      <div class="hhead">come si svolge</div>
+      <div class="hintbody">${hasExpl ? mathText(q.expl) : 'spiegazione non disponibile per questa domanda.'}</div>
+    </div>
+    <div class="qtext">${mathText(q.q)}</div>
+    <div id="opts"></div>
+    <div class="feedback" id="fb"></div>
+    <div class="ctrl">
+      <span class="progress">${state.totalSeen} risposte totali</span>
+      <button class="btn primary" id="nextBtn" disabled>avanti →</button>
+    </div>
+  `;
+
+  if(hasExpl){
+    el('hintBtn').addEventListener('click', ()=>{
+      const box = el('hintbox');
+      const btn = el('hintBtn');
+      box.classList.toggle('show');
+      btn.classList.toggle('active');
+    });
+  }
+
+  const optsWrap = el('opts');
+  q.options.forEach((opt, i)=>{
+    const div = document.createElement('div');
+    div.className = 'opt';
+    div.innerHTML = `<span class="k">${'abc'[i]}</span><span>${mathText(opt)}</span>`;
+    div.addEventListener('click', ()=> answer(q, i));
+    optsWrap.appendChild(div);
+  });
+
+  el('nextBtn').addEventListener('click', ()=>{
+    state.pos++;
+    saveState();
+    renderQuestion();
+  });
+
+  renderStats();
+  renderCurve();
+  renderWeak();
+}
+
+// (escapeHtml/mathText provided by mathrender.js, loaded before this file)
+
+function answer(q, chosenIdx){
+  if(locked) return;
+  locked = true;
+
+  const correctIdx = q.correct;
+  const isRight = chosenIdx === correctIdx;
+
+  const opts = document.querySelectorAll('#opts .opt');
+  opts.forEach((o,i)=>{
+    o.classList.add('locked');
+    if(i===correctIdx) o.classList.add('correct');
+    else if(i===chosenIdx) o.classList.add('wrong');
+    else o.classList.add('dim');
+  });
+
+  // update stats
+  if(!state.stats[q.n]) state.stats[q.n] = {seen:0, correct:0};
+  state.stats[q.n].seen++;
+  if(isRight) state.stats[q.n].correct++;
+
+  state.epochSeen++;
+  state.totalSeen++;
+  if(isRight){
+    state.epochCorrect++;
+    state.totalCorrect++;
+    state.streak++;
+  } else {
+    state.streak = 0;
+  }
+
+  const fb = el('fb');
+  fb.className = 'feedback show ' + (isRight ? 'ok' : 'no');
+  const correctLetter = 'abc'[correctIdx];
+  const correctText = q.options[correctIdx];
+  let html = `<div class="fhead">${isRight ? 'corretto' : `sbagliato — giusta: ${correctLetter}) ${mathText(correctText)}`}</div>`;
+  if(q.note){
+    html += `<div class="note"><b>nota:</b> ${mathText(q.note)}</div>`;
+  }
+  fb.innerHTML = html;
+
+  el('nextBtn').disabled = false;
+  renderStats();
+  saveState();
+}
+
+function renderEpochDone(){
+  const acc = state.epochSeen ? state.epochCorrect/state.epochSeen : 0;
+  state.history.push({epoch: state.epoch, acc});
+  if(state.history.length > 40) state.history.shift();
+
+  const overfit = acc >= 0.9;
+
+  el('card').innerHTML = `
+    <div class="done">
+      <div class="big">${Math.round(acc*100)}%</div>
+      <p>accuratezza dell'epoch ${state.epoch} — ${state.epochCorrect}/${state.epochSeen} corrette
+      ${overfit ? '<br>🔥 hai overfittato bene questo giro.' : '<br>ancora margine di miglioramento: il prossimo giro pesa di più le domande dove sbagli.'}</p>
+      <button class="btn primary" id="nextEpochBtn">inizia epoch ${state.epoch+1} →</button>
+      <div style="margin-top:10px;"><button class="btn ghost" id="resetBtn">azzera tutti i progressi</button></div>
+    </div>
+  `;
+
+  el('nextEpochBtn').addEventListener('click', ()=>{
+    state.epoch++;
+    state.epochSeen = 0;
+    state.epochCorrect = 0;
+    state.deck = buildDeck(state, false);
+    state.pos = 0;
+    saveState();
+    renderQuestion();
+  });
+
+  el('resetBtn').addEventListener('click', async ()=>{
+    if(!confirm('Sicura/o? Azzera tutte le statistiche salvate su questo dispositivo.')) return;
+    state = freshState();
+    state.deck = buildDeck(state, true);
+    await saveState();
+    renderQuestion();
+  });
+
+  renderStats();
+  renderCurve();
+  renderWeak();
+}
+
+// ---------- boot ---------------------------------------------------
+(async function(){
+  state = await loadState();
+  if(!state.deck || !state.deck.length){
+    state.deck = buildDeck(state, true);
+  }
+  document.querySelectorAll('.filt').forEach(btn=>{
+    btn.addEventListener('click', ()=> applyFilter(btn.dataset.src));
+  });
+  renderQuestion();
+})();
+
+</script>
+</body>
+</html>
